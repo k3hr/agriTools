@@ -1,30 +1,30 @@
 """
-Ingestion RPG (Registre Parcellaire Graphique) — IGN Géoplateforme
+Ingestion RPG (Registre Parcellaire Graphique) — IGN Géoplateforme WFS
 
 Le RPG recense les îlots culturaux déclarés à la PAC (surface, culture principale).
-Mis à jour annuellement, décalage d'environ 1 an.
+Mis à jour annuellement (décalage ~1 an). Dernière version disponible : 2023.
 
-Source principale : https://data.geopf.fr/telechargement/download/RPG/
-Source secondaire : https://geoservices.ign.fr/rpg
+Stratégie : WFS paginé avec filtre BBOX → ne télécharge que les parcelles
+autour de la ferme. Pas de téléchargement de la France entière (plusieurs GB).
 
-Le script utilise DuckDB Spatial pour lire les GeoPackage/GeoJSON sans dépendance
-GDAL/geopandas — DuckDB télécharge l'extension spatial automatiquement au premier run.
+WFS Géoplateforme IGN :
+    Endpoint   : https://data.geopf.fr/wfs/ows
+    Layer 2023 : RPG.2023:parcelles_graphiques
+    Layer 2022 : RPG.2022:parcelles_graphiques
 
 Usage :
-    python -m ingestion.geo.rpg                          # depuis config.toml
-    python -m ingestion.geo.rpg --dept 72                # Sarthe
-    python -m ingestion.geo.rpg --dept 72 53             # Sarthe + Mayenne
-    python -m ingestion.geo.rpg --year 2023              # année spécifique
-    python -m ingestion.geo.rpg --from-file file.gpkg    # fichier local déjà téléchargé
-    python -m ingestion.geo.rpg --list-years             # années disponibles sur IGN
+    python -m ingestion.geo.rpg                    # config.toml (année + bbox)
+    python -m ingestion.geo.rpg --year 2022        # année spécifique
+    python -m ingestion.geo.rpg --radius 50        # rayon 50 km
+    python -m ingestion.geo.rpg --verify           # vérifie le Parquet existant
+    python -m ingestion.geo.rpg --list-layers      # liste les couches RPG disponibles
+    python -m ingestion.geo.rpg --from-file f.gpkg # fichier local (fallback)
 """
 from __future__ import annotations
 
 import argparse
 import logging
 import math
-import shutil
-import tempfile
 import zipfile
 from pathlib import Path
 
@@ -32,7 +32,7 @@ import duckdb
 import polars as pl
 import requests
 from rich.logging import RichHandler
-from rich.progress import Progress, SpinnerColumn, DownloadColumn, TransferSpeedColumn, BarColumn, TimeRemainingColumn
+from rich.progress import Progress, SpinnerColumn, BarColumn
 
 from ingestion._config import load_config
 
@@ -48,267 +48,264 @@ logging.basicConfig(
 log = logging.getLogger("rpg")
 
 # ---------------------------------------------------------------------------
-# Constantes IGN Géoplateforme
+# Constantes WFS Géoplateforme IGN
 # ---------------------------------------------------------------------------
-# API catalogue pour découvrir les fichiers disponibles
-GEOPF_CATALOG_URL = "https://data.geopf.fr/telechargement/collections/RPG/items"
+WFS_ENDPOINT = "https://data.geopf.fr/wfs/ows"
+WFS_LAYER_PATTERN = "RPG.{year}:parcelles_graphiques"
+WFS_PAGE_SIZE = 1000          # nombre de features par requête WFS
+LATEST_KNOWN_YEAR = 2023      # dernière année confirmée disponible
 
-# Pattern URL de téléchargement direct (fallback si API indisponible)
-# Format IGN : RPG_2-0__GPKG_LAMB93_D{dept}_{year}-01-01
-GEOPF_DOWNLOAD_PATTERN = (
-    "https://data.geopf.fr/telechargement/download/RPG/"
-    "RPG_2-0__GPKG_LAMB93_D{dept}_{year}-01-01/"
-    "RPG_2-0__GPKG_LAMB93_D{dept}_{year}-01-01.7z"
-)
-
-# Codes culture PAC → libellés lisibles
-CODES_CULTURE = {
-    "1":  "Blé tendre", "2":  "Blé dur", "3":  "Orge", "4": "Autres céréales",
-    "5":  "Maïs grain et ensilage", "6": "Oléagineux", "7": "Protéagineux",
-    "8":  "Légumineuses à grains", "11": "Prairies permanentes",
+# Codes culture PAC → libellés
+CODES_CULTURE: dict[str, str] = {
+    "1":  "Blé tendre",       "2":  "Blé dur",          "3":  "Orge",
+    "4":  "Autres céréales",  "5":  "Maïs",              "6":  "Oléagineux",
+    "7":  "Protéagineux",     "8":  "Légumineuses",      "11": "Prairies permanentes",
     "12": "Prairies temporaires", "13": "Estives et landes",
-    "14": "Gel", "15": "Légumes ou fleurs",
-    "16": "Arboriculture", "17": "Viticulture",
-    "18": "Vergers", "19": "Fruits à coque",
-    "20": "Autres cultures industrielles",
-    "23": "Chanvre", "24": "Lin",
-    "25": "Divers", "28": "Semences",
+    "14": "Gel",              "15": "Légumes ou fleurs", "16": "Arboriculture",
+    "17": "Viticulture",      "18": "Vergers",           "19": "Fruits à coque",
+    "20": "Cultures industrielles", "23": "Chanvre",     "24": "Lin",
+    "25": "Divers",           "28": "Semences",
 }
 
 
 # ---------------------------------------------------------------------------
-# Découverte des fichiers disponibles
+# Géométrie
 # ---------------------------------------------------------------------------
-def list_available_years(dept: str, timeout: int = 15) -> list[int]:
+def _bbox(lat: float, lon: float, radius_km: float) -> tuple[float, float, float, float]:
     """
-    Interroge l'API catalogue IGN pour lister les années disponibles
-    pour un département donné.
-    Retourne une liste triée décroissante (plus récent en premier).
-    """
-    try:
-        params = {
-            "limit": 50,
-            "filter": f"id LIKE '%D{dept.zfill(3)}%'",
-        }
-        resp = requests.get(GEOPF_CATALOG_URL, params=params, timeout=timeout)
-        resp.raise_for_status()
-        items = resp.json().get("features", [])
-        years = []
-        for item in items:
-            # ID format attendu : RPG_2-0__GPKG_LAMB93_D072_2023-01-01
-            item_id = item.get("id", "")
-            for part in item_id.split("_"):
-                if part.startswith("20") and len(part) == 4 and part.isdigit():
-                    years.append(int(part))
-                    break
-        return sorted(set(years), reverse=True)
-    except Exception as e:
-        log.warning(f"API catalogue IGN inaccessible ({e}). Fallback sur années connues.")
-        return [2023, 2022, 2021]
-
-
-def resolve_download_url(dept: str, year: int | None = None, timeout: int = 15) -> tuple[str, int]:
-    """
-    Retourne (url, annee) pour le téléchargement d'un département RPG.
-    Si year=None, utilise la dernière année disponible.
-    """
-    dept_padded = dept.zfill(3)
-    years = list_available_years(dept, timeout)
-
-    if year is not None:
-        if year not in years:
-            log.warning(f"Année {year} peut ne pas être disponible pour le dept {dept}. Tentative quand même.")
-        target_year = year
-    else:
-        target_year = years[0] if years else 2023
-
-    url = GEOPF_DOWNLOAD_PATTERN.format(dept=dept_padded, year=target_year)
-    return url, target_year
-
-
-# ---------------------------------------------------------------------------
-# Téléchargement
-# ---------------------------------------------------------------------------
-def download_file(url: str, dest: Path, timeout: int = 300) -> Path:
-    """
-    Télécharge url → dest avec barre de progression.
-    Supporte les redirections.
-    """
-    log.info(f"Téléchargement : {url}")
-    with requests.get(url, stream=True, timeout=timeout) as resp:
-        resp.raise_for_status()
-        total = int(resp.headers.get("content-length", 0))
-        with Progress(
-            SpinnerColumn(),
-            "[progress.description]{task.description}",
-            BarColumn(),
-            DownloadColumn(),
-            TransferSpeedColumn(),
-            TimeRemainingColumn(),
-        ) as progress:
-            task = progress.add_task(dest.name, total=total or None)
-            with open(dest, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=1024 * 256):
-                    f.write(chunk)
-                    progress.advance(task, len(chunk))
-    log.info(f"  Téléchargé → {dest} ({dest.stat().st_size / 1e6:.1f} Mo)")
-    return dest
-
-
-def extract_archive(archive: Path, dest_dir: Path) -> Path:
-    """
-    Extrait l'archive (ZIP ou 7z) dans dest_dir.
-    Retourne le premier fichier GeoPackage (.gpkg) trouvé.
-    Nécessite 7z installé sur le système pour les archives .7z.
-    """
-    dest_dir.mkdir(parents=True, exist_ok=True)
-
-    if archive.suffix == ".zip":
-        log.info("Extraction ZIP...")
-        with zipfile.ZipFile(archive) as zf:
-            zf.extractall(dest_dir)
-
-    elif archive.suffix == ".7z":
-        log.info("Extraction 7z...")
-        # Tente d'abord py7zr (pip), puis 7z système
-        try:
-            import py7zr
-            with py7zr.SevenZipFile(archive, mode="r") as zf:
-                zf.extractall(dest_dir)
-        except ImportError:
-            import subprocess
-            result = subprocess.run(
-                ["7z", "x", str(archive), f"-o{dest_dir}", "-y"],
-                capture_output=True, text=True,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(
-                    "Impossible d'extraire le .7z. Installe py7zr (`uv pip install py7zr`) "
-                    "ou 7-Zip (https://www.7-zip.org/).\n"
-                    f"Erreur : {result.stderr}"
-                )
-    else:
-        raise ValueError(f"Format d'archive non supporté : {archive.suffix}")
-
-    # Trouve le GeoPackage
-    gpkg_files = list(dest_dir.rglob("*.gpkg"))
-    if not gpkg_files:
-        raise FileNotFoundError(f"Aucun fichier .gpkg trouvé dans {dest_dir}")
-
-    log.info(f"  GeoPackage trouvé : {gpkg_files[0].name}")
-    return gpkg_files[0]
-
-
-# ---------------------------------------------------------------------------
-# Lecture & filtrage spatial via DuckDB Spatial
-# ---------------------------------------------------------------------------
-def _bbox_from_center(lat: float, lon: float, radius_km: float) -> tuple[float, float, float, float]:
-    """
-    Calcule une bounding box WGS84 autour d'un point (lat, lon) avec un rayon en km.
+    Bounding box WGS84 autour d'un point.
     Retourne (min_lon, min_lat, max_lon, max_lat).
     """
-    # 1° de latitude ≈ 111.32 km
-    delta_lat = radius_km / 111.32
-    # 1° de longitude ≈ 111.32 * cos(lat) km
-    delta_lon = radius_km / (111.32 * math.cos(math.radians(lat)))
-    return (
-        lon - delta_lon,
-        lat - delta_lat,
-        lon + delta_lon,
-        lat + delta_lat,
-    )
+    dlat = radius_km / 111.32
+    dlon = radius_km / (111.32 * math.cos(math.radians(lat)))
+    return lon - dlon, lat - dlat, lon + dlon, lat + dlat
 
 
-def read_and_filter_gpkg(
-    gpkg_path: Path,
+# ---------------------------------------------------------------------------
+# WFS — liste des couches disponibles
+# ---------------------------------------------------------------------------
+def list_rpg_layers(timeout: int = 15) -> list[str]:
+    """
+    Interroge GetCapabilities pour lister les couches RPG disponibles.
+    """
+    try:
+        resp = requests.get(
+            WFS_ENDPOINT,
+            params={"SERVICE": "WFS", "VERSION": "2.0.0", "REQUEST": "GetCapabilities"},
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        # Parse minimal : cherche les noms de layers RPG dans le XML brut
+        layers = [
+            line.strip().replace("<Name>", "").replace("</Name>", "")
+            for line in resp.text.splitlines()
+            if "<Name>RPG." in line
+        ]
+        return sorted(set(layers))
+    except Exception as e:
+        log.warning(f"GetCapabilities inaccessible ({e})")
+        return []
+
+
+# ---------------------------------------------------------------------------
+# WFS — téléchargement paginé
+# ---------------------------------------------------------------------------
+def _wfs_page(
+    layer: str,
+    bbox: tuple[float, float, float, float],
+    start_index: int,
+    timeout: int = 60,
+) -> dict:
+    """
+    Récupère une page de features WFS en GeoJSON.
+    BBOX au format CRS:84 (lon/lat).
+    """
+    min_lon, min_lat, max_lon, max_lat = bbox
+    params = {
+        "SERVICE":      "WFS",
+        "VERSION":      "2.0.0",
+        "REQUEST":      "GetFeature",
+        "TYPENAMES":    layer,
+        "SRSNAME":      "CRS:84",
+        "BBOX":         f"{min_lon},{min_lat},{max_lon},{max_lat},CRS:84",
+        "outputFormat": "application/json",
+        "count":        WFS_PAGE_SIZE,
+        "startindex":   start_index,
+    }
+    resp = requests.get(WFS_ENDPOINT, params=params, timeout=timeout)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def fetch_wfs(
+    year: int,
     lat: float,
     lon: float,
     radius_km: float,
 ) -> pl.DataFrame:
     """
-    Lit un GeoPackage RPG via DuckDB Spatial, filtre spatialement,
-    et retourne un DataFrame Polars avec géométrie en WKT (EPSG:4326).
+    Télécharge toutes les parcelles RPG dans un rayon autour du point,
+    via WFS paginé.
+    """
+    layer = WFS_LAYER_PATTERN.format(year=year)
+    bbox = _bbox(lat, lon, radius_km)
+    min_lon, min_lat, max_lon, max_lat = bbox
+    log.info(f"  Layer WFS : {layer}")
+    log.info(f"  Rayon     : {radius_km} km → bbox [{min_lon:.4f},{min_lat:.4f},{max_lon:.4f},{max_lat:.4f}]")
 
-    DuckDB Spatial est installé automatiquement au premier appel.
-    Le GeoPackage IGN est en Lambert 93 (EPSG:2154) — transformation vers WGS84 incluse.
+    all_features: list[dict] = []
+    start = 0
+
+    with Progress(SpinnerColumn(), "[progress.description]{task.description}", BarColumn()) as progress:
+        task = progress.add_task("Téléchargement WFS...", total=None)
+
+        while True:
+            data = _wfs_page(layer, bbox, start)
+            features = data.get("features", [])
+            if not features:
+                break
+            all_features.extend(features)
+            progress.update(task, description=f"WFS — {len(all_features)} parcelles...")
+            start += len(features)
+            if len(features) < WFS_PAGE_SIZE:
+                break  # dernière page
+
+    log.info(f"  {len(all_features)} parcelles téléchargées")
+
+    if not all_features:
+        log.warning("Aucune parcelle dans la zone. Vérifie les coordonnées et le rayon.")
+        return pl.DataFrame(schema={
+            "id_parcel": pl.Utf8, "code_culture": pl.Utf8,
+            "surface_ha": pl.Float64, "libelle_culture": pl.Utf8,
+            "geometry_wkt": pl.Utf8,
+        })
+
+    return _features_to_dataframe(all_features)
+
+
+# ---------------------------------------------------------------------------
+# Transformation GeoJSON → DataFrame
+# ---------------------------------------------------------------------------
+def _geojson_geom_to_wkt(geom: dict) -> str:
+    """
+    Conversion GeoJSON geometry → WKT (Polygon/MultiPolygon).
+    Implémentation minimale sans dépendance externe.
+    """
+    def ring_to_wkt(ring: list) -> str:
+        return "(" + ",".join(f"{x} {y}" for x, y in ring) + ")"
+
+    gtype = geom.get("type", "")
+    coords = geom.get("coordinates", [])
+
+    if gtype == "Polygon":
+        rings = ",".join(ring_to_wkt(r) for r in coords)
+        return f"POLYGON({rings})"
+    elif gtype == "MultiPolygon":
+        polys = ",".join(
+            "(" + ",".join(ring_to_wkt(r) for r in poly) + ")"
+            for poly in coords
+        )
+        return f"MULTIPOLYGON({polys})"
+    else:
+        return ""
+
+
+def _features_to_dataframe(features: list[dict]) -> pl.DataFrame:
+    rows = []
+    for f in features:
+        props = f.get("properties", {})
+        geom = f.get("geometry") or {}
+        # Les noms de champs WFS peuvent varier selon la version
+        code = str(props.get("code_cultu") or props.get("CODE_CULTU") or "")
+        rows.append({
+            "id_parcel":     str(props.get("id_parcel") or props.get("ID_PARCEL") or ""),
+            "code_culture":  code,
+            "surface_ha":    float(props.get("surf_parc") or props.get("SURF_PARC") or 0.0),
+            "libelle_culture": CODES_CULTURE.get(code, "Inconnu"),
+            "geometry_wkt":  _geojson_geom_to_wkt(geom),
+        })
+    return pl.DataFrame(rows)
+
+
+# ---------------------------------------------------------------------------
+# Fallback : lecture d'un GeoPackage local via DuckDB Spatial
+# ---------------------------------------------------------------------------
+def read_gpkg(gpkg_path: Path, lat: float, lon: float, radius_km: float) -> pl.DataFrame:
+    """
+    Lit un GeoPackage local (téléchargé manuellement) via DuckDB Spatial.
+    Filtre spatialement si radius_km > 0.
+    La projection Lambert 93 (EPSG:2154) est reprojetée en WGS84 automatiquement.
     """
     conn = duckdb.connect()
     conn.execute("INSTALL spatial; LOAD spatial;")
 
     if radius_km > 0:
-        min_lon, min_lat, max_lon, max_lat = _bbox_from_center(lat, lon, radius_km)
-        log.info(f"  Filtre spatial : rayon {radius_km}km autour de {lat:.4f}°N {lon:.4f}°E")
-        log.info(f"  BBox WGS84 : lon [{min_lon:.4f}, {max_lon:.4f}] lat [{min_lat:.4f}, {max_lat:.4f}]")
-
-        # Transforme la bbox en Lambert 93 pour le filtre
-        # puis reprojette la géométrie en WGS84 pour le stockage
-        query = f"""
-            SELECT
-                CAST(ID_PARCEL AS VARCHAR)   AS id_parcel,
-                CODE_CULTU                   AS code_culture,
-                SURF_PARC                    AS surface_ha,
-                ST_AsText(
-                    ST_Transform(geom, 'EPSG:2154', 'EPSG:4326')
-                )                            AS geometry_wkt
-            FROM ST_Read('{gpkg_path}')
+        min_lon, min_lat, max_lon, max_lat = _bbox(lat, lon, radius_km)
+        where = f"""
             WHERE ST_Intersects(
                 ST_Transform(geom, 'EPSG:2154', 'EPSG:4326'),
                 ST_MakeEnvelope({min_lon}, {min_lat}, {max_lon}, {max_lat})
             )
         """
     else:
-        log.info("  Pas de filtre spatial — département complet")
-        query = f"""
-            SELECT
-                CAST(ID_PARCEL AS VARCHAR)   AS id_parcel,
-                CODE_CULTU                   AS code_culture,
-                SURF_PARC                    AS surface_ha,
-                ST_AsText(
-                    ST_Transform(geom, 'EPSG:2154', 'EPSG:4326')
-                )                            AS geometry_wkt
-            FROM ST_Read('{gpkg_path}')
-        """
+        where = ""
 
-    log.info("  Lecture GeoPackage via DuckDB Spatial...")
-    result = conn.execute(query).fetchall()
+    query = f"""
+        SELECT
+            CAST(ID_PARCEL AS VARCHAR)    AS id_parcel,
+            CODE_CULTU                    AS code_culture,
+            SURF_PARC                     AS surface_ha,
+            ST_AsText(
+                ST_Transform(geom, 'EPSG:2154', 'EPSG:4326')
+            )                             AS geometry_wkt
+        FROM ST_Read('{gpkg_path}')
+        {where}
+    """
+    rows = conn.execute(query).fetchall()
     conn.close()
 
-    if not result:
-        log.warning("  ⚠ Aucune parcelle dans la zone. Vérifie les coordonnées et le rayon.")
-        return pl.DataFrame(schema={
-            "id_parcel": pl.Utf8,
-            "code_culture": pl.Utf8,
-            "surface_ha": pl.Float64,
-            "geometry_wkt": pl.Utf8,
-        })
-
-    df = pl.DataFrame(
-        {
-            "id_parcel":    [r[0] for r in result],
-            "code_culture": [r[1] for r in result],
-            "surface_ha":   [r[2] for r in result],
-            "geometry_wkt": [r[3] for r in result],
-        }
-    )
-
-    # Enrichit avec le libellé culture
+    df = pl.DataFrame({
+        "id_parcel":    [r[0] for r in rows],
+        "code_culture": [r[1] for r in rows],
+        "surface_ha":   [r[2] for r in rows],
+        "geometry_wkt": [r[3] for r in rows],
+    })
     df = df.with_columns(
         pl.col("code_culture")
         .map_elements(lambda c: CODES_CULTURE.get(str(c), "Inconnu"), return_dtype=pl.Utf8)
         .alias("libelle_culture")
     )
-
     return df
 
 
 # ---------------------------------------------------------------------------
-# Sauvegarde Parquet
+# Vérification du Parquet existant
 # ---------------------------------------------------------------------------
-def save_parquet(df: pl.DataFrame, output_dir: Path, dept: str, year: int) -> Path:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    path = output_dir / f"rpg_D{dept.zfill(3)}_{year}.parquet"
+def verify(processed_dir: Path, year: int) -> None:
+    pattern = str(processed_dir / f"rpg_{year}.parquet")
+    result = duckdb.sql(f"""
+        SELECT
+            COUNT(*)                      AS n_parcelles,
+            ROUND(SUM(surface_ha), 0)     AS surface_totale_ha,
+            COUNT(DISTINCT code_culture)  AS n_cultures
+        FROM read_parquet('{pattern}')
+    """).fetchone()
+    if result:
+        print(f"\n── Vérification RPG {year} ────────────────────────────")
+        print(f"  Parcelles      : {result[0]:,}")
+        print(f"  Surface totale : {result[1]:,.0f} ha")
+        print(f"  Cultures diff. : {result[2]}")
+        print("─────────────────────────────────────────────────────\n")
+
+
+# ---------------------------------------------------------------------------
+# Sauvegarde
+# ---------------------------------------------------------------------------
+def save_parquet(df: pl.DataFrame, processed_dir: Path, year: int) -> Path:
+    processed_dir.mkdir(parents=True, exist_ok=True)
+    path = processed_dir / f"rpg_{year}.parquet"
     df.write_parquet(path, compression="zstd")
-    log.info(f"  ✓ {path.name}  ({len(df):,} parcelles, {df['surface_ha'].sum():.0f} ha)")
+    log.info(f"  ✓ {path.name}  ({len(df):,} parcelles  {df['surface_ha'].sum():.0f} ha)")
     return path
 
 
@@ -316,94 +313,79 @@ def save_parquet(df: pl.DataFrame, output_dir: Path, dept: str, year: int) -> Pa
 # Pipeline principal
 # ---------------------------------------------------------------------------
 def run(
-    depts: list[str] | None = None,
     year: int | None = None,
+    radius_km: float | None = None,
     from_file: Path | None = None,
-) -> dict[str, pl.DataFrame]:
+    verify_only: bool = False,
+) -> pl.DataFrame | None:
     cfg = load_config()
     lat = cfg["farm"]["latitude"]
     lon = cfg["farm"]["longitude"]
-    radius_km = cfg.get("geo", {}).get("rayon_km", 25)
-    cfg_depts = cfg.get("geo", {}).get("departements", ["72"])
-    cfg_year = cfg.get("geo", {}).get("annee_rpg", None)
+    r = radius_km if radius_km is not None else cfg.get("geo", {}).get("rayon_km", 25)
+    y = year or cfg.get("geo", {}).get("annee_rpg", None) or LATEST_KNOWN_YEAR
 
-    target_depts = depts or cfg_depts
-    target_year = year or cfg_year  # None = auto-détecté
-
-    raw_dir = Path(cfg["paths"]["raw"]) / "geo" / "rpg"
     processed_dir = Path(cfg["paths"]["processed"]) / "geo"
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    processed_dir.mkdir(parents=True, exist_ok=True)
 
-    results = {}
+    if verify_only:
+        verify(processed_dir, y)
+        return None
 
-    for dept in target_depts:
-        log.info(f"\n── Département {dept} ──────────────────────────────────────")
+    if from_file:
+        log.info(f"Lecture GeoPackage local : {from_file}")
+        df = read_gpkg(from_file, lat, lon, r)
+    else:
+        df = fetch_wfs(y, lat, lon, r)
 
-        if from_file:
-            gpkg_path = from_file
-            resolved_year = target_year or 2023
-        else:
-            url, resolved_year = resolve_download_url(dept, target_year)
-            archive_name = url.split("/")[-1]
-            archive_path = raw_dir / archive_name
+    if len(df) == 0:
+        return df
 
-            if not archive_path.exists():
-                download_file(url, archive_path)
-            else:
-                log.info(f"  Archive déjà présente : {archive_path.name}")
+    save_parquet(df, processed_dir, y)
 
-            extract_dir = raw_dir / archive_path.stem
-            gpkg_path = extract_archive(archive_path, extract_dir)
-
-        df = read_and_filter_gpkg(gpkg_path, lat, lon, radius_km)
-        log.info(f"  {len(df):,} parcelles extraites")
-
-        path = save_parquet(df, processed_dir, dept, resolved_year)
-        results[dept] = df
-
-        # Résumé par culture
-        if len(df) > 0:
-            summary = (
-                df.group_by("libelle_culture")
-                .agg(
-                    pl.len().alias("n_parcelles"),
-                    pl.col("surface_ha").sum().alias("surface_ha"),
-                )
-                .sort("surface_ha", descending=True)
-                .head(8)
-            )
-            log.info("  Top cultures dans la zone :")
-            for row in summary.iter_rows(named=True):
-                log.info(f"    {row['libelle_culture']:30s} {row['n_parcelles']:4d} parcelles  {row['surface_ha']:8.1f} ha")
+    # Résumé par culture
+    summary = (
+        df.group_by("libelle_culture")
+        .agg(
+            pl.len().alias("n"),
+            pl.col("surface_ha").sum().round(1).alias("ha"),
+        )
+        .sort("ha", descending=True)
+        .head(10)
+    )
+    log.info("\n  Top cultures dans la zone :")
+    for row in summary.iter_rows(named=True):
+        log.info(f"    {row['libelle_culture']:30s} {row['n']:4d} parcelles  {row['ha']:8.1f} ha")
 
     log.info("\nIngestion RPG terminée ✓")
-    return results
+    return df
 
 
 # ---------------------------------------------------------------------------
 # Point d'entrée
 # ---------------------------------------------------------------------------
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Ingestion RPG — IGN Géoplateforme")
-    parser.add_argument("--dept", nargs="+", help="Code(s) département (ex: 72 53)")
-    parser.add_argument("--year", type=int, help="Année du RPG (défaut: dernière disponible)")
-    parser.add_argument("--from-file", type=Path, help="Fichier GeoPackage local (skip téléchargement)")
-    parser.add_argument("--list-years", action="store_true", help="Liste les années disponibles")
+    parser = argparse.ArgumentParser(description="Ingestion RPG — WFS IGN Géoplateforme")
+    parser.add_argument("--year",      type=int,   default=None, help=f"Année RPG (défaut: {LATEST_KNOWN_YEAR})")
+    parser.add_argument("--radius",    type=float, default=None, help="Rayon km (défaut: config.toml)")
+    parser.add_argument("--from-file", type=Path,  default=None, help="GeoPackage local (bypass WFS)")
+    parser.add_argument("--verify",    action="store_true",      help="Vérifie le Parquet existant")
+    parser.add_argument("--list-layers", action="store_true",    help="Liste les couches RPG WFS disponibles")
     args = parser.parse_args()
 
-    if args.list_years:
-        cfg = load_config()
-        depts = args.dept or cfg.get("geo", {}).get("departements", ["72"])
-        for dept in depts:
-            years = list_available_years(dept)
-            print(f"Département {dept} : {years}")
+    if args.list_layers:
+        layers = list_rpg_layers()
+        if layers:
+            print("Couches RPG disponibles sur le WFS :")
+            for layer in layers:
+                print(f"  {layer}")
+        else:
+            print("Impossible de récupérer la liste (GetCapabilities inaccessible).")
         return
 
     run(
-        depts=args.dept,
         year=args.year,
+        radius_km=args.radius,
         from_file=args.from_file,
+        verify_only=args.verify,
     )
 
 

@@ -38,6 +38,18 @@ variables = [
     "shortwave_radiation_sum",
 ]
 
+[prix]
+# Marchés MIN à conserver (vide = tous les marchés)
+# Le MIN le plus proche de la Sarthe est Nantes-Saint-Lucé
+# Rungis est la référence nationale pour le pricing
+marches = ["NANTES SAINT LUCE", "RUNGIS"]
+
+# Stade de commercialisation (GROS = marché de gros MIN)
+stades = ["GROS"]
+
+# Nombre d'années d'historique pour le backfill initial
+historical_years = 5
+
 [geo]
 # Département(s) à télécharger pour le RPG (code INSEE, ex: "72" = Sarthe)
 departements = ["72"]
