@@ -1,0 +1,36 @@
+[project]
+name = "agritools"
+version = "0.1.0"
+description = "Suite d'outils pour le pilotage d'une ferme maraîchère"
+requires-python = ">=3.10"
+dependencies = [
+    "polars>=0.20",
+    "duckdb>=1.0",
+    "pydantic>=2.0",
+    "streamlit>=1.35",
+    "requests>=2.31",
+    "rich>=13.0",
+    "apscheduler>=3.10",
+]
+
+[project.optional-dependencies]
+geo = [
+    "geopandas>=0.14",
+    "folium>=0.15",
+    "shapely>=2.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.hatch.build.targets.wheel]
+packages = ["ingestion", "implantation", "app"]

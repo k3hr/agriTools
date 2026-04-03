@@ -1,0 +1,62 @@
+# =============================================================================
+# agriTools — Configuration
+# Copier ce fichier en config.local.toml pour surcharger localement.
+# config.local.toml est dans .gitignore — ne jamais committer les coordonnées
+# ou données personnelles.
+# =============================================================================
+
+[project]
+name = "agriTools"
+description = "Suite d'outils pour le pilotage d'une ferme maraîchère"
+
+[paths]
+# Chemins relatifs à la racine du projet
+raw       = "datalake/raw"
+processed = "datalake/processed"
+catalog   = "datalake/catalog"
+duckdb    = "datalake/agritools.duckdb"
+
+[farm]
+# ⚠️  À personnaliser avec les coordonnées GPS réelles de la ferme
+nom       = "Ma ferme"
+latitude  = 46.0
+longitude = 2.0
+timezone  = "Europe/Paris"
+
+[meteo]
+# Nombre d'années d'historique à récupérer au premier backfill
+historical_years = 5
+
+# Variables Open-Meteo à ingérer (cf. https://open-meteo.com/en/docs)
+variables = [
+    "temperature_2m_max",
+    "temperature_2m_min",
+    "temperature_2m_mean",
+    "precipitation_sum",
+    "et0_fao_evapotranspiration",
+    "wind_speed_10m_max",
+    "shortwave_radiation_sum",
+]
+
+[geo]
+# Département(s) à télécharger pour le RPG (code INSEE, ex: "72" = Sarthe)
+departements = ["72"]
+
+# Rayon de filtre spatial autour des coordonnées de la ferme (km)
+# Mettre à 0 pour conserver tout le département
+rayon_km = 25
+
+# Année du RPG à télécharger (laisser vide = dernière disponible détectée)
+# annee_rpg = 2023
+
+[sondes]
+# Répertoire où les CSV des sondes DIY sont déposés (Raspberry/Arduino)
+# Format attendu : date,heure,temperature_sol,humidite_sol,[autres colonnes]
+input_dir     = "datalake/raw/perso/sondes"
+delimiter     = ","
+date_col      = "date"
+date_format   = "%Y-%m-%d"
+
+[compta]
+# Répertoire des exports hledger (.journal) ou CSV
+input_dir = "datalake/raw/perso/compta"

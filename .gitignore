@@ -1,0 +1,45 @@
+# =============================================================================
+# agriTools — .gitignore
+# =============================================================================
+
+# Données — ne jamais committer les données brutes ou traitées
+datalake/raw/
+datalake/processed/
+datalake/catalog/
+datalake/*.duckdb
+datalake/*.duckdb.wal
+
+# Configuration locale (coordonnées GPS, chemins machine)
+config.local.toml
+.env
+
+# Données personnelles — sécurité absolue
+datalake/raw/perso/
+datalake/processed/perso/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+.uv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Notebooks checkpoints
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Éditeurs
+.vscode/
+.idea/
+*.swp
+*.swo
