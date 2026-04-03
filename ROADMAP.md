@@ -136,8 +136,8 @@ agriTools/
 
 **Objectif** : Poser les fondations techniques, rien de plus.
 
-- [ ] Initialiser `pyproject.toml` avec `uv` (Python 3.12, dépendances core)
-- [ ] Créer la structure de dossiers du dépôt
+- [X] Initialiser `pyproject.toml` avec `uv` (Python 3.12, dépendances core)
+- [X] Créer la structure de dossiers du dépôt
 - [ ] Configurer `.gitignore` (données brutes, duckdb, perso/, secrets)
 - [ ] Écrire `config.toml` : chemins absolus configurables, pas de hardcode
 - [ ] Premier script d'ingestion : **Open-Meteo** (point GPS de référence → Parquet)
