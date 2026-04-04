@@ -199,22 +199,24 @@ Les parcelles peuvent être enrichies automatiquement depuis le datalake :
 ### Météo (Open-Meteo)
 
 ```python
-# À implémenter : enrichissement depuis les Parquet meteo
-# Remplir parcelle.meteo_precip_annuelle_mm, meteo_jours_gel
+from implantation.enrichment import ParcelleEnricher
+
+enricher = ParcelleEnricher()
+parcelle, diagnostics = enricher.enrich(parcelle)
 ```
 
 ### Prix comparables (DVF)
 
 ```python
-# À implémenter : requête DuckDB sur prix_rnm, DVF
-# Cas use : comparer prix_achat demandé vs marché local
+# Requête DuckDB sur prix_dvf_*.parquet quand les colonnes nécessaires existent
+# Remplit parcelle.prix_comparable_eur_ha sinon ajoute un warning diagnostic
 ```
 
 ### Forages (BRGM)
 
 ```python
-# À implémenter : spatial query rayon 5 km
-# Remplir forages_brgm_count pour contexte ressource eau
+# Spatial query rayon 5 km sur bss_stations.parquet
+# Remplit forages_brgm_count et expose la station la plus proche dans diagnostics
 ```
 
 ---
@@ -245,7 +247,7 @@ print(engine.score_parcelle(p).global_score)
 - ✅ Critères individuels (12 fonctions, cas limites)
 - ✅ Moteur scoring (3 axes, agrégation, pondération)
 - ✅ Multi-parcelle (batch, tri)
-- ⏳ Enrichissement datalake (à venir UI)
+- ✅ Enrichissement datalake (météo, DVF si exploitable, BSS)
 
 ---
 
@@ -254,10 +256,9 @@ print(engine.score_parcelle(p).global_score)
 ### UI Streamlit (Phase 3 - Suite)
 
 Pages à construire :
-1. **Formulaire Parcelle** — Saisie + enrichissement auto depuis datalake
-2. **Scores Parcelle** — Radar chart, scores détaillés par axe
-3. **Comparaison** — Tableau side-by-side 3–5 parcelles
-4. **Export** — PDF rapport, Markdown
+1. **Scores Parcelle** — Radar chart, scores détaillés par axe
+2. **Comparaison** — Tableau side-by-side 3–5 parcelles
+3. **Export** — PDF rapport, Markdown
 
 ### Enrichissements datalake
 

@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 import streamlit as st
+from implantation.enrichment import ParcelleEnricher
 from implantation.models.parcelle import Parcelle
 from implantation.reports.pdf_report import generate_pdf
 from implantation.scoring.engine import ScoringEngine
@@ -103,8 +104,36 @@ if submit:
             notes=notes.strip(),
             statut=statut,
         )
+        enricher = ParcelleEnricher()
+        parcelle, diagnostics = enricher.enrich(parcelle)
         saved_path = save_parcelle(parcelle)
         st.success(f"Parcelle enregistrée avec succès dans `{saved_path.name}`")
+
+        st.markdown("### Enrichissement datalake")
+        diag_cols = st.columns(4)
+        with diag_cols[0]:
+            st.metric("Pluie annuelle", f"{parcelle.meteo_precip_annuelle_mm:.1f} mm" if parcelle.meteo_precip_annuelle_mm is not None else "n/d")
+        with diag_cols[1]:
+            st.metric("Jours de gel", parcelle.meteo_jours_gel if parcelle.meteo_jours_gel is not None else "n/d")
+        with diag_cols[2]:
+            st.metric("Prix DVF comparable", f"{parcelle.prix_comparable_eur_ha:,.0f} €/ha".replace(",", " ") if parcelle.prix_comparable_eur_ha is not None else "n/d")
+        with diag_cols[3]:
+            st.metric("Forages BRGM < 5 km", parcelle.forages_brgm_count if parcelle.forages_brgm_count is not None else "n/d")
+
+        if diagnostics.weather_years:
+            ref_point = (
+                f"{diagnostics.weather_point[0]:.4f}, {diagnostics.weather_point[1]:.4f}"
+                if diagnostics.weather_point
+                else "point inconnu"
+            )
+            st.caption(f"Météo calculée sur {diagnostics.weather_years} années depuis le point météo le plus proche ({ref_point}).")
+        if diagnostics.nearest_bss_km is not None:
+            st.caption(f"Station BSS la plus proche: {diagnostics.nearest_bss_km:.1f} km.")
+        if diagnostics.dvf_transactions:
+            st.caption(f"Transactions DVF exploitables dans le rayon local: {diagnostics.dvf_transactions}.")
+        for warning in diagnostics.warnings:
+            st.info(warning)
+
         st.json(parcelle.model_dump())
 
         # Calculer et afficher le scoring
