@@ -73,14 +73,14 @@ class ParcelleScore:
     def summary(self) -> str:
         """Résumé formaté du scoring."""
         lines = [
-            f"🌱 Parcelle: {self.parcelle_nom}",
-            f"📊 Score global: {self.global_score}/100",
+            f"Parcelle: {self.parcelle_nom}",
+            f"Score global: {self.global_score}/100",
             f"",
-            f"  💶 Économique & logistique: {self.score_economique_logistique.score}/100 "
+            f"  Economique & logistique: {self.score_economique_logistique.score}/100 "
             f"(poids {int(self.score_economique_logistique.weight*100)}%)",
-            f"  💧 Eau & irrigation:        {self.score_eau_irrigation.score}/100 "
+            f"  Eau & irrigation:        {self.score_eau_irrigation.score}/100 "
             f"(poids {int(self.score_eau_irrigation.weight*100)}%)",
-            f"  🏔️  Topographie & exposition: {self.score_topographie_exposition.score}/100 "
+            f"  Topographie & exposition: {self.score_topographie_exposition.score}/100 "
             f"(poids {int(self.score_topographie_exposition.weight*100)}%)",
         ]
         return "\n".join(lines)

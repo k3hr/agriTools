@@ -1,7 +1,7 @@
 # agriTools — Roadmap Status
 
 **Dernière mise à jour :** 2026-04-04
-**Session :** Sprint initial (2 jours) + Phase 2 DVF
+**Session :** Sprint initial (2 jours) + Phase 2 DVF + Phase 3 scoring preview
 
 ---
 
@@ -62,7 +62,7 @@
 | Tests implantation | ✅ | `tests/test_implantation.py` — 47 tests validés |
 | UI formulaire parcelle | ✅ | `app/pages/3_Parcelle.py` — saisie, validation, persistance JSON |
 | Composant persistance parcelle | ✅ | `app/components/parcelle.py` — save/load sous `datalake/raw/perso/parcelles/` |
-| Scoring preview UI | ⬜ | Intégration scoring temps réel dans formulaire |
+| Scoring preview UI | ✅ | Intégration scoring temps réel dans formulaire après sauvegarde |
 | Rapport implantation PDF | ⬜ | Export structuré via WeasyPrint |
 
 
@@ -89,6 +89,7 @@
 - **`dvf.py` Polars string filtering** — `str.strip()` non disponible sur `ExprStringNameSpace`. Fix : `str.strip_chars(" ")` + `str.strip_prefix("0")`.
 - **`dvf.py` DataFrame construction** — `pl.DataFrame([pl.lit(year)])` créait une colonne object. Fix : `pl.Series(name, [value], dtype)`.
 - **`parcelle.py` JSON serialization** — `model_dump()` non sérialisable (datetime). Fix : `model_dump_json()`.
+- **Scoring preview integration** — Ajout évaluation automatique dans formulaire parcelle avec scores par axe et critères détaillés.
 
 ---
 

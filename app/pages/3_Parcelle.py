@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import streamlit as st
 from implantation.models.parcelle import Parcelle
+from implantation.scoring.engine import ScoringEngine
 from app.components.parcelle import list_parcelles, save_parcelle
 
 st.set_page_config(page_title="Parcelle — agriTools", page_icon="🧭", layout="wide")
@@ -101,6 +102,48 @@ if submit:
         saved_path = save_parcelle(parcelle)
         st.success(f"Parcelle enregistrée avec succès dans `{saved_path.name}`")
         st.json(parcelle.model_dump())
+
+        # Calculer et afficher le scoring
+        st.markdown("---")
+        st.subheader("📊 Évaluation automatique")
+
+        engine = ScoringEngine()
+        score = engine.score_parcelle(parcelle)
+
+        # Score global en évidence
+        col_score, col_details = st.columns([1, 2])
+        with col_score:
+            st.metric(
+                label="Score global",
+                value=f"{score.global_score}/100",
+                delta="Recommandé" if score.global_score >= 70 else "À améliorer"
+            )
+
+        with col_details:
+            st.markdown(score.summary())
+
+        # Détails par axe avec barres de progression
+        st.markdown("### Détails par axe")
+
+        axes = [
+            ("Economique & Logistique", score.score_economique_logistique),
+            ("Eau & Irrigation", score.score_eau_irrigation),
+            ("Topographie & Exposition", score.score_topographie_exposition),
+        ]
+
+        for axe_name, axe_score in axes:
+            with st.expander(f"{axe_name}: {axe_score.score}/100", expanded=True):
+                st.progress(axe_score.score / 100)
+
+                # Afficher les critères contributifs
+                criteria_cols = st.columns(len(axe_score.criteria))
+                for i, (crit_name, crit_score) in enumerate(axe_score.criteria.items()):
+                    with criteria_cols[i]:
+                        st.metric(
+                            label=crit_name.replace("_", " ").title(),
+                            value=f"{crit_score}/100"
+                        )
+
     except Exception as exc:
         st.error(f"Erreur de validation : {exc}")
 

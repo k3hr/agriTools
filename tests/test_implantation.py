@@ -252,7 +252,7 @@ class TestScoringEngine:
         
         assert "Ideal Parcel" in summary
         assert "Score global" in summary
-        assert "Économique & logistique" in summary
+        assert "Economique & logistique" in summary
         assert "Eau & irrigation" in summary
         assert "Topographie & exposition" in summary
 
