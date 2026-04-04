@@ -8,7 +8,12 @@ import pytest
 import polars as pl
 from datetime import date
 
-from ingestion.meteo.open_meteo import response_to_dataframe
+from ingestion.meteo.open_meteo import (
+    compute_backfill_start,
+    determine_fetch_start,
+    merge_weather_data,
+    response_to_dataframe,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -76,3 +81,95 @@ class TestResponseToDataframe:
     def test_no_nulls_in_date(self, valid_response):
         df = response_to_dataframe(valid_response)
         assert df["date"].null_count() == 0
+
+
+class TestRefreshWindow:
+    def test_compute_backfill_start_uses_inclusive_calendar_years(self):
+        assert compute_backfill_start(date(2026, 4, 4), 5) == date(2022, 1, 1)
+
+    def test_compute_backfill_start_rejects_zero_years(self):
+        with pytest.raises(ValueError):
+            compute_backfill_start(date(2026, 4, 4), 0)
+
+    def test_determine_fetch_start_without_existing_data_is_full(self):
+        start, mode = determine_fetch_start(
+            existing_df=None,
+            end=date(2026, 4, 4),
+            backfill_years=5,
+            refresh_lookback_days=30,
+            force_full_refresh=False,
+        )
+        assert start == date(2022, 1, 1)
+        assert mode == "full"
+
+    def test_determine_fetch_start_with_existing_data_is_incremental(self):
+        existing_df = pl.DataFrame(
+            {
+                "date": [date(2026, 3, 20), date(2026, 3, 21), date(2026, 3, 22)],
+                "temperature_2m_max": [15.0, 16.0, 17.0],
+            }
+        )
+
+        start, mode = determine_fetch_start(
+            existing_df=existing_df,
+            end=date(2026, 4, 4),
+            backfill_years=5,
+            refresh_lookback_days=10,
+            force_full_refresh=False,
+        )
+        assert start == date(2026, 3, 12)
+        assert mode == "incremental"
+
+    def test_force_full_refresh_ignores_existing_data(self):
+        existing_df = pl.DataFrame(
+            {"date": [date(2026, 3, 22)], "temperature_2m_max": [17.0]}
+        )
+
+        start, mode = determine_fetch_start(
+            existing_df=existing_df,
+            end=date(2026, 4, 4),
+            backfill_years=5,
+            refresh_lookback_days=10,
+            force_full_refresh=True,
+        )
+        assert start == date(2022, 1, 1)
+        assert mode == "full"
+
+
+class TestMergeWeatherData:
+    def test_merge_weather_data_prefers_newest_row_for_same_date(self):
+        existing_df = pl.DataFrame(
+            {
+                "date": [date(2026, 3, 20), date(2026, 3, 21)],
+                "temperature_2m_max": [15.0, 16.0],
+                "precipitation_sum": [0.0, 1.0],
+            }
+        )
+        new_df = pl.DataFrame(
+            {
+                "date": [date(2026, 3, 21), date(2026, 3, 22)],
+                "temperature_2m_max": [18.5, 19.0],
+                "precipitation_sum": [2.5, 0.0],
+            }
+        )
+
+        merged = merge_weather_data(existing_df, new_df)
+
+        assert merged["date"].to_list() == [
+            date(2026, 3, 20),
+            date(2026, 3, 21),
+            date(2026, 3, 22),
+        ]
+        assert merged.filter(pl.col("date") == date(2026, 3, 21))["temperature_2m_max"][0] == pytest.approx(18.5)
+
+    def test_merge_weather_data_accepts_empty_existing_dataset(self):
+        new_df = pl.DataFrame(
+            {
+                "date": [date(2026, 3, 22)],
+                "temperature_2m_max": [19.0],
+            }
+        )
+
+        merged = merge_weather_data(None, new_df)
+
+        assert merged.equals(new_df.sort("date"))

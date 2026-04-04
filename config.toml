@@ -42,10 +42,12 @@ variables = [
 # Marchés MIN à conserver (vide = tous les marchés)
 # Le MIN le plus proche de la Sarthe est Nantes-Saint-Lucé
 # Rungis est la référence nationale pour le pricing
-marches = ["NANTES SAINT LUCE", "RUNGIS"]
+# TEMP: Added actual market from ZIP data for testing
+marches = ["NANTES SAINT LUCE", "RUNGIS", "Bassin Auvergne Rhône-Alpes : kiwi, châtaigne-marron, noix"]
 
 # Stade de commercialisation (GROS = marché de gros MIN)
-stades = ["GROS"]
+# TEMP: Added actual stage from ZIP data for testing
+stades = ["GROS", "Expédition"]
 
 # Nombre d'années d'historique pour le backfill initial
 historical_years = 5

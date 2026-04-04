@@ -32,7 +32,6 @@ import zipfile
 from datetime import date
 from pathlib import Path
 
-import duckdb
 import polars as pl
 import requests
 from rich.logging import RichHandler
@@ -60,20 +59,20 @@ DATASET_SLUG = "cotations-du-reseau-des-nouvelles-des-marches"
 # Normalisation des noms de colonnes selon les millésimes du dataset
 # Les colonnes ont changé de nom au fil du temps
 COL_ALIASES: dict[str, list[str]] = {
-    "date":       ["date_cotation", "DateDebut", "date_debut", "date", "Date", "Semaine"],
+    "date":       ["date_cotation", "DateDebut", "date_debut", "date", "Date", "Semaine", "date cotation"],
     "annee":      ["annee", "Annee", "année", "year"],
     "semaine":    ["semaine", "Semaine", "num_semaine", "week"],
     "produit":    ["produit_libelle", "produit", "Produit", "libelle_produit", "Libelle_Produit"],
-    "marche":     ["marche_libelle", "marche", "Marche", "libelle_marche", "Libelle_Marche"],
+    "marche":     ["marche_libelle", "marche", "Marche", "libelle_marche", "Libelle_Marche", "marché"],
     "stade":      ["stade_libelle", "stade", "Stade"],
-    "categorie":  ["categorie", "Categorie", "catégorie"],
+    "categorie":  ["categorie", "Categorie", "catégorie", "code produit"],
     "calibre":    ["calibre", "Calibre"],
     "variete":    ["variete", "Variete", "variété"],
     "origine":    ["origine", "Origine"],
     "unite":      ["unite", "Unite", "unité", "Unité"],
-    "prix_min":   ["prix_min", "Prix Min", "PrixMin", "prix min", "min"],
-    "prix_max":   ["prix_max", "Prix Max", "PrixMax", "prix max", "max"],
-    "prix_moyen": ["prix_moyen", "Prix Moyen", "PrixMoyen", "prix moyen", "moyen", "Moyen"],
+    "prix_min":   ["prix_min", "Prix Min", "PrixMin", "prix min", "min", "valeur en euro(s)"],
+    "prix_max":   ["prix_max", "Prix Max", "PrixMax", "prix max", "max", "valeur en euro(s)"],
+    "prix_moyen": ["prix_moyen", "Prix Moyen", "PrixMoyen", "prix moyen", "moyen", "Moyen", "valeur en euro(s)"],
 }
 
 # Schéma cible normalisé
@@ -288,6 +287,9 @@ def normalize(df: pl.DataFrame) -> pl.DataFrame:
     Renomme et caste les colonnes vers le schéma cible normalisé.
     Les colonnes manquantes sont ajoutées avec des valeurs nulles.
     """
+    # Strip whitespace from column names
+    df = df.rename({col: col.strip() for col in df.columns})
+
     cols = df.columns
 
     # Construire le mapping renommage
@@ -346,11 +348,26 @@ def parse_csv(raw: bytes, year: int) -> pl.DataFrame:
     )
 
     log.debug(f"  Colonnes brutes ({year}) : {df.columns}")
+    log.debug(f"  Types de colonnes: {df.dtypes}")
     df = normalize(df)
 
     # Injecter l'année si absente
     if df["annee"].null_count() == len(df):
-        df = df.with_columns(pl.lit(year).cast(pl.Int32).alias("annee"))
+        # Essayer d'extraire l'année depuis la colonne date
+        if "date" in df.columns and df["date"].dtype == pl.Utf8:
+            try:
+                # Extraire l'année depuis des dates comme "08/01/2026" ou "2026-01-08"
+                extracted_years = (
+                    df["date"]
+                    .str.extract(r"(\d{4})", 1)  # Capture le groupe 1 (l'année)
+                    .cast(pl.Int32)
+                )
+                df = df.with_columns(annee=extracted_years)
+                log.debug(f"  Année extraite depuis la colonne date")
+            except Exception:
+                df = df.with_columns(pl.lit(year).cast(pl.Int32).alias("annee"))
+        else:
+            df = df.with_columns(pl.lit(year).cast(pl.Int32).alias("annee"))
 
     return df
 
@@ -395,6 +412,7 @@ def save_parquet(df: pl.DataFrame, processed_dir: Path, year: int) -> Path:
 # Vérification
 # ---------------------------------------------------------------------------
 def verify(processed_dir: Path) -> None:
+    import duckdb
     pattern = str(processed_dir / "prix_rnm_*.parquet")
     try:
         result = duckdb.sql(f"""
@@ -420,6 +438,7 @@ def verify(processed_dir: Path) -> None:
 
 
 def list_marches(processed_dir: Path) -> None:
+    import duckdb
     pattern = str(processed_dir / "prix_rnm_*.parquet")
     rows = duckdb.sql(f"""
         SELECT marche, COUNT(*) AS n
@@ -432,6 +451,7 @@ def list_marches(processed_dir: Path) -> None:
 
 
 def list_produits(processed_dir: Path) -> None:
+    import duckdb
     pattern = str(processed_dir / "prix_rnm_*.parquet")
     rows = duckdb.sql(f"""
         SELECT produit, COUNT(*) AS n

@@ -141,8 +141,8 @@ agriTools/
 - [X] Configurer `.gitignore` (données brutes, duckdb, perso/, secrets)
 - [X] Écrire `config.toml` : chemins absolus configurables, pas de hardcode
 - [X] Premier script d'ingestion : **Open-Meteo** (point GPS de référence → Parquet)
-- [ ] Vérifier que DuckDB interroge le Parquet produit
-- [ ] README opérationnel (installation, premier run)
+- [X] Vérifier que DuckDB interroge le Parquet produit
+- [X] README opérationnel (installation, premier run)
 
 **Livrable** : `python -m ingestion.meteo.open_meteo` produit un fichier Parquet requêtable.
 
@@ -152,7 +152,7 @@ agriTools/
 
 **Objectif** : Avoir un datalake vivant avec les données open data essentielles et un premier dashboard.
 
-- [ ] Ingestion **météo** complète (historical backfill 5 ans + cron quotidien)
+- [X] Ingestion **météo** complète (historical backfill 5 ans + refresh quotidien local via APScheduler)
 - [X] Ingestion **prix MIN** (FranceAgriMer RNM — marchés de référence région, local ZIP support ajouté)
 - [ ] Ingestion **RPG** (Registre Parcellaire Graphique — couverture département)
 - [ ] Catalogue YAML pour chaque dataset (source, schéma, fréquence MAJ, licence)
