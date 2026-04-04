@@ -89,3 +89,119 @@ def meteo_date_range() -> tuple[date, date]:
         FROM read_parquet('{pattern}')
     """).fetchone()
     return date.fromisoformat(row[0]), date.fromisoformat(row[1])
+
+
+# =============================================================================
+# Fonctions de vérification du datalake (Tableau de bord)
+# =============================================================================
+
+@st.cache_data(ttl=300, show_spinner=False)
+def datalake_status() -> dict:
+    """
+    Vérifie la fraîcheur et l'état de chaque source du datalake.
+    Retourne un dict avec last_update, row_count, et status pour chaque source.
+    Cache 5 minutes.
+    """
+    from datetime import datetime, timedelta
+    
+    cfg = load_config()
+    processed_root = cfg["paths"]["processed"]
+    
+    status = {}
+    
+    # --- Météo ---
+    try:
+        pattern_meteo = _processed_dir("meteo")
+        row = duckdb.sql(f"""
+            SELECT MAX(date)::TEXT, COUNT(*) as n
+            FROM read_parquet('{pattern_meteo}')
+        """).fetchone()
+        last_date = date.fromisoformat(row[0]) if row[0] else None
+        count = row[1] if row else 0
+        
+        days_old = (date.today() - last_date).days if last_date else None
+        is_fresh = days_old is not None and days_old <= 3
+        
+        status["meteo"] = {
+            "last_update": last_date,
+            "days_old": days_old,
+            "row_count": count,
+            "status": "✅ À jour" if is_fresh else ("⚠️ Ancien" if days_old is not None else "❌ Erreur"),
+            "alert": None if is_fresh else f"Pas d'update depuis {days_old} jours"
+        }
+    except Exception as e:
+        status["meteo"] = {
+            "last_update": None,
+            "days_old": None,
+            "row_count": 0,
+            "status": "❌ Erreur",
+            "alert": str(e)[:50]
+        }
+    
+    # --- Prix RNM ---
+    try:
+        pattern_prix = _processed_dir("prix")
+        row = duckdb.sql(rf"""
+            SELECT MAX(
+                CASE 
+                    WHEN date ~ '^\d{{2}}/\d{{2}}/\d{{4}}$' THEN TRY_STRPTIME(date, '%d/%m/%Y')::DATE
+                    ELSE TRY_STRPTIME(date, '%Y-%m-%d')::DATE
+                END
+            )::TEXT, COUNT(*) as n
+            FROM read_parquet('{pattern_prix}')
+        """).fetchone()
+        last_date = date.fromisoformat(row[0]) if row[0] else None
+        count = row[1] if row else 0
+        
+        days_old = (date.today() - last_date).days if last_date else None
+        is_fresh = days_old is not None and days_old <= 10
+        
+        status["prix"] = {
+            "last_update": last_date,
+            "days_old": days_old,
+            "row_count": count,
+            "status": "✅ À jour" if is_fresh else ("⚠️ Ancien" if days_old is not None else "❌ Erreur"),
+            "alert": None if is_fresh else f"Pas d'update depuis {days_old} jours"
+        }
+    except Exception as e:
+        status["prix"] = {
+            "last_update": None,
+            "days_old": None,
+            "row_count": 0,
+            "status": "❌ Erreur",
+            "alert": str(e)[:50]
+        }
+    
+    # --- RPG ---
+    try:
+        pattern_rpg = _processed_dir("geo")
+        # Le fichier RPG vient du catalog — récupérer la date du fichier
+        rpg_files = list(Path(processed_root).glob("geo/*.parquet"))
+        last_mtime = max([f.stat().st_mtime for f in rpg_files]) if rpg_files else None
+        last_date = date.fromtimestamp(last_mtime) if last_mtime else None
+        
+        count = duckdb.sql(f"""
+            SELECT COUNT(*) as n
+            FROM read_parquet('{pattern_rpg}')
+        """).fetchone()[0]
+        
+        days_old = (date.today() - last_date).days if last_date else None
+        is_fresh = days_old is not None and days_old <= 365  # RPG annuel
+        
+        status["rpg"] = {
+            "last_update": last_date,
+            "days_old": days_old,
+            "row_count": count,
+            "status": "✅ À jour" if is_fresh else ("⚠️ Ancien" if days_old is not None else "❌ Erreur"),
+            "alert": None if is_fresh else f"Pas d'update depuis {days_old} jours"
+        }
+    except Exception as e:
+        status["rpg"] = {
+            "last_update": None,
+            "days_old": None,
+            "row_count": 0,
+            "status": "❌ Erreur",
+            "alert": str(e)[:50]
+        }
+    
+    return status

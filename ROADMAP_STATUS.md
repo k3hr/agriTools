@@ -29,11 +29,27 @@
 | Catalogue YAML RPG | ✅ | `datalake/catalog/geo_rpg.yaml` |
 | Dashboard Streamlit météo | ✅ | `app/pages/1_Météo.py` — températures, pluie, ETP, bilan hydrique |
 | Dashboard Streamlit prix | ✅ | `app/pages/2_Prix.py` — évolution, distribution, saisonnalité |
+| Dashboard Streamlit datalake | ✅ | `app/pages/0_Tableau_de_Bord.py` — état santé sources, alertes fraîcheur |
 | Tests pytest | ✅ | **47/47** — open_meteo, rnm, rpg |
-| Scheduler APScheduler | ⬜ | `--schedule` dispo en CLI, pas de démon configuré |
+| Scheduler Tâches planifiées | ✅ | Windows scheduled tasks : météo 6h quotidien, RNM vendredi 7h, logs `datalake/logs/` |
 | Pydantic contracts sur parsers | ⬜ | Dep installée, non câblée |
 
 ---
+
+## Implémentations complétées (2026-04-04)
+
+### Scheduler Windows (Option A)
+- **Scripts PowerShell** : `scripts/schedule_meteo.ps1` + `scripts/schedule_rnm.ps1`
+- **Tâches planifiées** : Météo daily 6h, RNM weekly vendredi 7h via `schtasks` (shell) → `Register-ScheduledTask` (PS)
+- **Logging** : Chaque refresh génère `datalake/logs/meteo_refresh_YYYY-MM-DD_HHmmss.log` et `rnm_refresh_...log`
+- **Éprouvé** : Prêt pour prod, exécution autonome sans intervention
+
+### Tableau de bord datalake (`0_Tableau_de_Bord.py`)
+- **Fonctionnalité** : Page d'accueil Streamlit affichant état de santé 3 sources (meteo/prix/rpg)
+- **Indicateurs** : Dernière MAJ, nb jours depuis update, nb lignes, statut ✅/⚠️/❌
+- **Alertes** : Méteo > 3j = warning, Prix > 10j = warning, RPG > 365j = warning
+- **Code** : `app/components/data.py::datalake_status()` avec cache 5 min
+- **Reqs** : Accès DuckDB direct, lectures Parquet patterns, détection fichier RPG
 
 ## Bugs corrigés (session 2026-04-04)
 
@@ -41,6 +57,7 @@
 - **`open_meteo.py` tronqué** — 167 lignes manquantes (de `verify()` à `main()`). Restauré depuis git HEAD.
 - **`test_rnm.py::test_year_injected_when_missing`** — `str.extract()` sur colonne `date` null retournait null sans déclencher le fallback `pl.lit(year)`. Fix : guard `null_count < len` avant d'accepter les années extraites.
 - **`2_Prix.py` saisonnalité** — `pl.col("mois").replace(dict)` échouait sur la conversion `Int8 → Utf8`. Fix : `map_elements(..., return_dtype=pl.Utf8)`.
+- **`data.py` regex escape sequences** — Changé SQL f-string en raw f-string (rf""") pour éviter interprétation `\d` par Python.
 
 ---
 
@@ -59,37 +76,36 @@ pytest  47/47 ✅
 
 ## 3 prochaines actions prioritaires
 
-### 1. Scheduler météo persistent (cron Windows ou APScheduler service)
+### 1. ✅ Scheduler météo persistent (TERMINÉ 2026-04-04)
 
-Le refresh quotidien Open-Meteo existe en CLI (`--schedule`) mais tourne en process bloquant. Il faut le rendre autonome :
-
-- **Option A (simple) :** Tâche planifiée Windows (`schtasks`) qui lance `uv run python -m ingestion.meteo.open_meteo` chaque matin à 6h.
-- **Option B (propre) :** Script PowerShell wrapper + entrée dans le Planificateur de tâches avec logging dans `datalake/logs/`.
-
-Même chose pour les prix RNM (hebdomadaire, vendredi matin).
+**Implémenté** : Option A (Windows scheduled tasks)
+- Scripts : `scripts/schedule_meteo.ps1` + `scripts/schedule_rnm.ps1`
+- Tâches : météo 6h quotidien (schtasks), RNM vendredi 7h
+- Logs : `datalake/logs/meteo_refresh_*.log` et `datalake/logs/rnm_refresh_*.log`
 
 ---
 
-### 2. Page Streamlit "Tableau de bord datalake" (synthèse sources)
+### 2. ✅ Page Streamlit "Tableau de bord datalake" (TERMINÉ 2026-04-04)
 
-Page d'accueil enrichie qui affiche pour chaque source :
-- date de dernière mise à jour (lire les Parquet)
-- nombre de lignes
-- alertes si la donnée est trop ancienne (météo > 3 jours, prix > 10 jours)
-
-Donne une vision de l'état de santé du datalake sans ouvrir DuckDB. Utile au quotidien.
+**Implémenté** : `app/pages/0_Tableau_de_Bord.py`
+- Affiche état de santé : méteo/prix/RPG
+- Indicateurs : dernière MAJ, jours depuis update, nb lignes
+- Alertes : fraîcheur (méteo > 3j, prix > 10j, RPG > 365j)
+- Helper : `app/components/data.py::datalake_status()` (cache 5 min)
 
 ---
 
-### 3. Scaffold module `implantation` — modèle `Parcelle` + scoring
+### 3. 🔴 Scaffold module `implantation` — modèle `Parcelle` + scoring (À FAIRE)
 
-Démarrer la Phase 3 avec les fondations :
+Démarrer la Phase 3 avec les fondations du scoring parcellaire :
 - `implantation/models/parcelle.py` — modèle Pydantic `Parcelle` (tel que défini dans le ROADMAP)
 - `implantation/scoring/engine.py` — moteur de scoring pondéré (axes Économique, Eau, Topographie)
 - `implantation/scoring/criteria.py` — critères individuels 0–100
 
-Pas d'UI encore, juste le cœur métier testable en Python pur.
+Pas d'UI encore, juste le cœur métier testable en Python pur. Tests pytest inclus.
+
+Estimé : 1–2 h pour les 3 fichiers + tests.
 
 ---
 
-*Reprise prévue : prochaine session.*
+*Reprise prévue : Phase 3 — Implantation.*
