@@ -11,7 +11,7 @@
 |---|---|---|
 | Phase 0 | Bootstrap | ✅ Terminée |
 | Phase 1 | Datalake fondations | ✅ Terminée |
-| Phase 2 | Données personnelles + enrichissement geo | 🟡 En cours (compta + sondes) |
+| Phase 2 | Données personnelles + enrichissement geo | ✅ Terminée |
 | Phase 3 | Outil d'aide à l'implantation v1 | 🟡 En cours (UI parcelle) |
 | Phase 4 | Consolidation & profondeur | ⬜ Non démarrée |
 
@@ -43,15 +43,15 @@
 | Ingestion DVF (prix transactions foncières) | ✅ | `ingestion/prix/dvf.py` — filtre zone géographique, Parquet annuel |
 | Catalogue YAML DVF | ✅ | `datalake/catalog/prix_dvf.yaml` |
 | Tests DVF | ✅ | `tests/test_dvf.py` — parsing, filtrage, normalisation |
-| Module ingestion comptabilité | ⬜ | CSV → Parquet, schéma Pydantic |
+| Module ingestion comptabilité | 🔵 | Reporté Phase 4 — hledger pas encore en place |
 | Module ingestion heures travail | ✅ | `ingestion/perso/heures.py` — dupliqué dans le bloc ci-dessous |
-| Module ingestion sondes terrain | ⬜ | À adapter selon matériel |
+| Module ingestion sondes terrain | 🔵 | Reporté Phase 4 — matériel pas encore reçu |
 | Ingestion BRGM BSS (forages) | ✅ | `ingestion/geo/bss.py` — Hub'eau API, bbox+haversine, 5 stations, 21 tests |
 | Catalogue YAML BSS | ✅ | `datalake/catalog/geo_bss.yaml` |
 | Module heures de travail | ✅ | `ingestion/perso/heures.py` — CLI start/stop/add/list/ingest/verify, parser NLP durée+date, 35 tests |
 | Ingestion ADES (piézométrie) | ✅ | `ingestion/geo/ades.py` — Hub'eau /chroniques, batching par station, 24 tests |
 | Dashboard synthèse datalake | ✅ | `app/pages/0_Tableau_de_Bord.py` — état sources, alertes fraîcheur |
-| Page dashboard comptabilité | ⬜ | Marges, CA, charges fixes/variables |
+| Page dashboard comptabilité | 🔵 | Reporté Phase 4 — dépend du module ingestion compta |
 
 ---
 
