@@ -1,7 +1,7 @@
 # agriTools — Roadmap Status
 
 **Dernière mise à jour :** 2026-04-04
-**Session :** Sprint initial (2 jours) + Phase 2 DVF + BSS + Phase 3 scoring preview
+**Session :** Sprint initial (2 jours) + Phase 2 DVF + BSS + heures + Phase 3 scoring preview
 
 ---
 
@@ -11,7 +11,7 @@
 |---|---|---|
 | Phase 0 | Bootstrap | ✅ Terminée |
 | Phase 1 | Datalake fondations | ✅ Terminée |
-| Phase 2 | Données personnelles + enrichissement geo | 🟡 En cours (DVF + BSS) |
+| Phase 2 | Données personnelles + enrichissement geo | 🟡 En cours (DVF + BSS + heures) |
 | Phase 3 | Outil d'aide à l'implantation v1 | 🟡 En cours (UI parcelle) |
 | Phase 4 | Consolidation & profondeur | ⬜ Non démarrée |
 
@@ -30,9 +30,9 @@
 | Dashboard Streamlit météo | ✅ | `app/pages/1_Météo.py` — températures, pluie, ETP, bilan hydrique |
 | Dashboard Streamlit prix | ✅ | `app/pages/2_Prix.py` — évolution, distribution, saisonnalité |
 | Dashboard Streamlit datalake | ✅ | `app/pages/0_Tableau_de_Bord.py` — état santé sources, alertes fraîcheur |
-| Tests pytest | ✅ | **68/68** — open_meteo, rnm, rpg, implantation, dvf, bss |
+| Tests pytest | ✅ | **103/103** — open_meteo, rnm, rpg, implantation, dvf, bss, heures |
 | Scheduler Tâches planifiées | ✅ | Windows scheduled tasks : météo 6h quotidien, RNM vendredi 7h, logs `datalake/logs/` |
-| Pydantic contracts sur parsers | ⬜ | Dep installée, non câblée |
+| Pydantic contracts sur parsers | 🔵 | Déplacé en Phase 4 — parsers déjà robustes, priorité basse pour usage solo |
 
 ---
 
@@ -44,10 +44,11 @@
 | Catalogue YAML DVF | ✅ | `datalake/catalog/prix_dvf.yaml` |
 | Tests DVF | ✅ | `tests/test_dvf.py` — parsing, filtrage, normalisation |
 | Module ingestion comptabilité | ⬜ | CSV → Parquet, schéma Pydantic |
-| Module ingestion heures travail | ⬜ | Formulaire Streamlit + CSV |
+| Module ingestion heures travail | ✅ | `ingestion/perso/heures.py` — dupliqué dans le bloc ci-dessous |
 | Module ingestion sondes terrain | ⬜ | À adapter selon matériel |
 | Ingestion BRGM BSS (forages) | ✅ | `ingestion/geo/bss.py` — Hub'eau API, bbox+haversine, 5 stations, 21 tests |
 | Catalogue YAML BSS | ✅ | `datalake/catalog/geo_bss.yaml` |
+| Module heures de travail | ✅ | `ingestion/perso/heures.py` — CLI start/stop/add/list/ingest/verify, parser NLP durée+date, 35 tests |
 | Ingestion ADES (piézométrie) | ⬜ | Données locales si disponibles |
 | Dashboard synthèse datalake | ✅ | `app/pages/0_Tableau_de_Bord.py` — état sources, alertes fraîcheur |
 | Page dashboard comptabilité | ⬜ | Marges, CA, charges fixes/variables |
