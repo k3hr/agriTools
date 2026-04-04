@@ -12,7 +12,7 @@
 | Phase 0 | Bootstrap | ✅ Terminée |
 | Phase 1 | Datalake fondations | ✅ Terminée |
 | Phase 2 | Données personnelles + enrichissement geo | ✅ Terminée |
-| Phase 3 | Outil d'aide à l'implantation v1 | 🟡 En cours (UI parcelle) |
+| Phase 3 | Outil d'aide à l'implantation v1 | ✅ Terminée |
 | Phase 4 | Consolidation & profondeur | ⬜ Non démarrée |
 
 ---
@@ -65,7 +65,7 @@
 | UI formulaire parcelle | ✅ | `app/pages/3_Parcelle.py` — saisie, validation, persistance JSON |
 | Composant persistance parcelle | ✅ | `app/components/parcelle.py` — save/load sous `datalake/raw/perso/parcelles/` |
 | Scoring preview UI | ✅ | Intégration scoring temps réel dans formulaire après sauvegarde |
-| Rapport implantation PDF | ⬜ | Export structuré via WeasyPrint |
+| Rapport implantation PDF | ✅ | `implantation/reports/pdf_report.py` — reportlab, 2 pages A4, bandeau vert, barres de score, bouton download Streamlit |
 
 
 ### Scheduler Windows (Option A)

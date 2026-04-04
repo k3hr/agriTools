@@ -3,8 +3,12 @@ Formulaire de saisie de parcelle candidate pour le module implantation.
 """
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 import streamlit as st
 from implantation.models.parcelle import Parcelle
+from implantation.reports.pdf_report import generate_pdf
 from implantation.scoring.engine import ScoringEngine
 from app.components.parcelle import list_parcelles, save_parcelle
 
@@ -144,6 +148,29 @@ if submit:
                             value=f"{crit_score}/100"
                         )
 
+        # --- Rapport PDF ---
+        st.markdown("---")
+        st.subheader("📄 Rapport PDF")
+        if st.button("Générer le rapport d'implantation", type="primary"):
+            with st.spinner("Génération du rapport PDF…"):
+                try:
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        pdf_path = generate_pdf(parcelle, score, output_dir=Path(tmpdir))
+                        pdf_bytes = pdf_path.read_bytes()
+
+                    date_str = __import__("datetime").date.today().strftime("%Y%m%d")
+                    filename = f"rapport_{parcelle.id}_{date_str}.pdf"
+
+                    st.download_button(
+                        label="⬇ Télécharger le rapport PDF",
+                        data=pdf_bytes,
+                        file_name=filename,
+                        mime="application/pdf",
+                    )
+                    st.success(f"Rapport généré : `{filename}`")
+                except Exception as exc:
+                    st.error(f"Erreur génération PDF : {exc}")
+
     except Exception as exc:
         st.error(f"Erreur de validation : {exc}")
 
@@ -159,3 +186,22 @@ else:
             st.write(f"Fichier : `{p['path'].split('/')[-1]}`")
             st.write(f"Créé : {p['created']}")
             st.json(p['raw'])
+
+            # Rapport PDF depuis la liste
+            if st.button("📄 Générer rapport PDF", key=f"pdf_{p['id']}"):
+                with st.spinner("Génération…"):
+                    try:
+                        parc = Parcelle.model_validate(p['raw'])
+                        with tempfile.TemporaryDirectory() as tmpdir:
+                            pdf_path = generate_pdf(parc, output_dir=Path(tmpdir))
+                            pdf_bytes = pdf_path.read_bytes()
+                        date_str = __import__("datetime").date.today().strftime("%Y%m%d")
+                        st.download_button(
+                            label="⬇ Télécharger",
+                            data=pdf_bytes,
+                            file_name=f"rapport_{p['id']}_{date_str}.pdf",
+                            mime="application/pdf",
+                            key=f"dl_{p['id']}",
+                        )
+                    except Exception as exc:
+                        st.error(f"Erreur : {exc}")
