@@ -1,1 +1,4 @@
-{}
+{
+  "tests/test_implantation.py": true,
+  "tests/test_dvf.py::TestParseCSV::test_parse_csv_accepts_comma_decimals": true
+}
