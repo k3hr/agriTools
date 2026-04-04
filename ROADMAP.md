@@ -1,13 +1,25 @@
-# agriTools — Roadmap v0.1
-*Dernière mise à jour : 2026-04-03*
+# agriTools — Roadmap
+
+**Dernière mise à jour :** 2026-04-04
+**État global :** Phases 0–3 terminées · Phase 4 en cours de constitution
+
+---
+
+## État des phases
+
+| Phase | Intitulé | Statut |
+|---|---|---|
+| Phase 0 | Bootstrap | ✅ Terminée |
+| Phase 1 | Datalake fondations | ✅ Terminée |
+| Phase 2 | Données personnelles + enrichissement geo | ✅ Terminée |
+| Phase 3 | Outil d'aide à l'implantation v1 | ✅ Terminée |
+| Phase 4 | Consolidation & profondeur | 🔵 Backlog constitué, non démarrée |
 
 ---
 
 ## 1. Vision & Périmètre
 
 **agriTools** est une suite d'outils personnels à destination d'un maraîcher souhaitant piloter son activité par la donnée. Le projet n'a pas de vocation commerciale. Il doit pouvoir vivre et évoluer sur l'ensemble d'une carrière.
-
-Deux composants sont au cœur de cette première itération :
 
 | Composant | Objectif |
 |---|---|
@@ -34,21 +46,23 @@ Deux composants sont au cœur de cette première itération :
 |---|---|---|
 | Runtime | Python 3.12+ | Écosystème data mature, confort |
 | Gestion packages | **uv** | Remplacement moderne de pip/venv, ultra-rapide |
-| ETL / transformation | **Polars** | Plus rapide que pandas, API lazy evaluation, gestion native Parquet |
-| Moteur analytique | **DuckDB** (fichier `.duckdb`) | SQL in-process sur Parquet, zéro serveur, performances impressionnantes |
-| Validation schémas | **Pydantic v2** | Contrats de données explicites dès l'ingestion |
-| Interface utilisateur | **Streamlit** | Prototypage rapide d'apps data, pas de JS requis |
+| ETL / transformation | **Polars ≥ 0.20** | Plus rapide que pandas, API lazy evaluation, gestion native Parquet |
+| Moteur analytique | **DuckDB ≥ 1.0** (fichier `.duckdb`) | SQL in-process sur Parquet, zéro serveur |
+| Validation schémas | **Pydantic v2** | Contrats de données explicites sur les modèles métier |
+| Interface utilisateur | **Streamlit ≥ 1.35** | Prototypage rapide d'apps data, pas de JS requis |
 | Cartographie | **GeoPandas + Folium** | Analyse spatiale + rendu carte dans Streamlit |
-| Scheduler | **APScheduler** ou cron système | Ingestion automatique périodique, sans Airflow |
+| Scheduler | **Windows Scheduled Tasks** (scripts PowerShell) | Solution native Windows, zéro dépendance Python supplémentaire |
+| Génération PDF | **reportlab ≥ 4.0** | Rapports A4 structurés pour l'outil d'implantation |
 | Tests | **pytest** | Couverture des parsers et du moteur de scoring |
 
 ### 3.2 Stockage
 
 ```
-Format source de vérité : Parquet (colonnaire, compressé, requêtable directement par DuckDB)
+Format source de vérité : Parquet (colonnaire, compressé ZSTD, requêtable directement par DuckDB)
 Format staging/raw     : CSV, JSON, GeoJSON — conservés tels quels
-Format catalogue       : YAML (lisible humain)
-Format config          : TOML (pyproject.toml, config.toml)
+Format catalogue       : YAML (lisible humain, un fichier par dataset)
+Format config          : TOML (pyproject.toml, config.toml + config.local.toml)
+Format rapports        : PDF (reportlab)
 ```
 
 DuckDB joue le rôle de moteur de requête unifié : il peut interroger des fichiers Parquet, CSV, JSON
@@ -62,38 +76,61 @@ agriTools/
 │   ├── raw/                        # données brutes, jamais modifiées
 │   │   ├── meteo/
 │   │   ├── prix/
-│   │   ├── stats/
 │   │   ├── geo/
 │   │   └── perso/                  # données personnelles (gitignore)
 │   ├── processed/                  # Parquet nettoyés, partitionnés
-│   │   ├── meteo/
+│   │   ├── meteo/                  # partitionné par année
 │   │   ├── prix/
-│   │   ├── stats/
-│   │   ├── geo/
-│   │   └── perso/
-│   ├── catalog/                    # YAML de métadonnées par dataset
+│   │   ├── geo/                    # bss_stations.parquet, ades_chroniques.parquet, rpg_parcelles.parquet
+│   │   └── perso/                  # heures_travail.parquet
+│   ├── catalog/                    # YAML de métadonnées par dataset (7 fichiers)
+│   ├── reports/
+│   │   └── implantation/           # PDF générés (gitignore)
+│   ├── logs/                       # logs scheduler (gitignore)
 │   └── agritools.duckdb            # base DuckDB locale (gitignore)
 │
 ├── ingestion/                      # scripts ETL, un module par source
+│   ├── _config.py                  # chargement config.toml + config.local.toml
 │   ├── meteo/
+│   │   └── open_meteo.py
 │   ├── prix/
+│   │   ├── rnm.py
+│   │   └── dvf.py
 │   ├── geo/
+│   │   ├── rpg.py
+│   │   ├── bss.py
+│   │   └── ades.py
 │   └── perso/
+│       └── heures.py
 │
 ├── implantation/                   # outil d'aide à la décision foncière
-│   ├── models/                     # Pydantic models (Parcelle, Scenario…)
-│   ├── scoring/                    # moteur de scoring pondéré
-│   ├── enrichment/                 # enrichissement depuis le datalake
-│   └── reports/                    # templates export
+│   ├── models/
+│   │   └── parcelle.py             # Pydantic Parcelle (26 champs)
+│   ├── scoring/
+│   │   ├── engine.py               # ScoringEngine, ScoringWeights, ParcelleScore
+│   │   └── criteria.py             # 13 critères individuels (0–100)
+│   ├── enrichment/                 # enrichissement depuis le datalake (Phase 4)
+│   └── reports/
+│       └── pdf_report.py           # génération rapport A4 via reportlab
 │
-├── app/                            # applications Streamlit
+├── app/                            # application Streamlit
+│   ├── main.py                     # page d'accueil avec métriques globales
 │   ├── pages/
+│   │   ├── 0_Tableau_de_Bord.py    # état sources, alertes fraîcheur
+│   │   ├── 1_Météo.py              # températures, pluie, ETP, bilan hydrique
+│   │   ├── 2_Prix.py               # évolution, distribution, saisonnalité RNM
+│   │   └── 3_Parcelle.py           # saisie, scoring, export PDF
 │   └── components/
+│       ├── data.py                 # couche d'accès aux données (cache Streamlit)
+│       └── parcelle.py             # persistance JSON parcelles
 │
-├── notebooks/                      # exploration ad-hoc (jamais en prod)
-├── tests/
-├── docs/
-├── config.toml                     # paramètres globaux (chemins, clés API)
+├── scripts/
+│   ├── schedule_meteo.ps1          # tâche planifiée Windows météo (daily 6h)
+│   └── schedule_rnm.ps1            # tâche planifiée Windows RNM (vendredi 7h)
+│
+├── tests/                          # 127 tests, tous verts
+├── config.toml                     # paramètres globaux (chemins, API, rayon ferme)
+├── config.local.toml               # surcharge locale — coords réelles (gitignore)
 ├── pyproject.toml
 └── ROADMAP.md
 ```
@@ -104,198 +141,146 @@ agriTools/
 
 ### 4.1 Open Data
 
-| Domaine | Source | URL | Fréquence | Format |
+| Domaine | Source | Statut | Fréquence | Format |
 |---|---|---|---|---|
-| Météo historique + prévision | **Open-Meteo** | https://open-meteo.com | Quotidien | JSON/API (gratuit, sans clé) |
-| Météo officielle FR | **Météo-France API** | https://portail-api.meteofrance.fr | Quotidien | JSON/API (clé gratuite) |
-| Prix marchés MIN | **FranceAgriMer / RNM** | https://rnm.franceagrimer.fr | Hebdomadaire | CSV/Excel |
-| Stats agricoles | **Agreste (MASA)** | https://agreste.agriculture.gouv.fr | Annuel | CSV/Excel |
-| Registre Parcellaire Graphique | **IGN / RPG** | https://geoservices.ign.fr/rpg | Annuel | GeoJSON/Shapefile |
-| Prix fonciers agricoles | **DVF (data.gouv.fr)** | https://www.data.gouv.fr/fr/datasets/demandes-de-valeurs-foncieres | Semestriel | CSV |
-| Prix fonciers SAFER | **SAFER** | https://www.safer.fr/publications | Annuel | PDF/CSV (selon région) |
-| Hydrogéologie / forages | **BRGM / BSS** | https://infoterre.brgm.fr | Statique | WFS/JSON |
-| Eaux souterraines | **ADES** | https://ades.eaufrance.fr | Variable | CSV/API |
-| Données sol (pédologie) | **INRAE GéoSol** | https://geosol.inrae.fr | Statique | WMS/WFS |
-| Indices économiques | **INSEE** | https://www.insee.fr/fr/statistiques | Annuel | CSV |
+| Météo historique + prévision | **Open-Meteo** | ✅ Ingéré | Quotidien (scheduled) | JSON/API |
+| Prix marchés MIN | **FranceAgriMer / RNM** | ✅ Ingéré | Hebdomadaire (scheduled) | CSV/ZIP |
+| Registre Parcellaire Graphique | **IGN / RPG 2023** | ✅ Ingéré | Annuel | GeoJSON |
+| Prix fonciers agricoles | **DVF (data.gouv.fr)** | ✅ Ingéré | Semestriel | CSV |
+| Hydrogéologie / forages | **BRGM / BSS (Hub'eau)** | ✅ Ingéré | Statique | JSON/API |
+| Eaux souterraines piézométrie | **ADES (Hub'eau)** | ✅ Ingéré | Mensuel | JSON/API |
+| Météo officielle FR | **Météo-France API** | ⬜ Phase 4 | Quotidien | JSON/API |
+| Stats agricoles | **Agreste (MASA)** | ⬜ Phase 4 | Annuel | CSV |
+| Prix fonciers SAFER | **SAFER** | ⬜ Phase 4 | Annuel | PDF/CSV |
+| Données sol (pédologie) | **INRAE GéoSol** | ⬜ Phase 4 | Statique | WMS/WFS |
+| Indices économiques | **INSEE** | ⬜ Phase 4 | Annuel | CSV |
 
 ### 4.2 Données personnelles
 
-| Domaine | Description | Format d'entrée envisagé |
+| Domaine | Statut | Format d'entrée |
 |---|---|---|
-| Comptabilité | Recettes, charges, immobilisations | CSV export logiciel compta / saisie manuelle |
-| Relevés sondes terrain | Température sol, humidité, pH | CSV ou API selon matériel (ex. Metos, Sencrop…) |
-| Relevés heures travail | Journaux d'activité par poste | CSV / formulaire Streamlit |
-| Inventaire semences | Stocks, achats, taux germination | CSV / formulaire Streamlit |
-| Journal cultural | Notes parcelle, interventions | Markdown structuré |
+| Relevés heures travail | ✅ Ingéré | CLI (`heures.py`) + CSV |
+| Comptabilité | 🔵 Phase 4 | Export hledger CSV + relevé banque CSV |
+| Relevés sondes terrain | 🔵 Phase 4 | CSV Raspberry/Arduino (matériel en attente) |
+| Inventaire semences | ⬜ Phase 5+ | CSV / formulaire Streamlit |
+| Journal cultural | ⬜ Phase 5+ | Markdown structuré |
 
 ---
 
-## 5. Roadmap
+## 5. Phase 4 — Consolidation & profondeur (backlog)
 
-### Phase 0 — Bootstrap (S1–S2)
+### Reportés depuis phases précédentes
 
-**Objectif** : Poser les fondations techniques, rien de plus.
+| Item | Origine | Notes |
+|---|---|---|
+| Pydantic contracts sur parsers | Phase 1 | Parsers robustes pour usage solo — priorité basse |
+| Module ingestion comptabilité | Phase 2 | Attente mise en place hledger + relevés bancaires |
+| Page dashboard comptabilité | Phase 2 | Dépend du module ingestion compta |
+| Module ingestion sondes terrain | Phase 2 | Attente réception matériel |
 
-- [X] Initialiser `pyproject.toml` avec `uv` (Python 3.12, dépendances core)
-- [X] Créer la structure de dossiers du dépôt
-- [X] Configurer `.gitignore` (données brutes, duckdb, perso/, secrets)
-- [X] Écrire `config.toml` : chemins absolus configurables, pas de hardcode
-- [X] Premier script d'ingestion : **Open-Meteo** (point GPS de référence → Parquet)
-- [X] Vérifier que DuckDB interroge le Parquet produit
-- [X] README opérationnel (installation, premier run)
+### Nouvelles entrées Phase 4
 
-**Livrable** : `python -m ingestion.meteo.open_meteo` produit un fichier Parquet requêtable.
-
----
-
-### Phase 1 — Datalake fondations (M1–M2)
-
-**Objectif** : Avoir un datalake vivant avec les données open data essentielles et un premier dashboard.
-
-- [X] Ingestion **météo** complète (historical backfill 5 ans + refresh quotidien local via APScheduler)
-- [X] Ingestion **prix MIN** (FranceAgriMer RNM — marchés de référence région, local ZIP support ajouté)
-- [ ] Ingestion **RPG** (Registre Parcellaire Graphique — couverture département)
-- [ ] Catalogue YAML pour chaque dataset (source, schéma, fréquence MAJ, licence)
-- [ ] Scheduler APScheduler : météo quotidien, prix hebdomadaire
-- [ ] Premier dashboard **Streamlit** : météo locale (température, pluie, ETP) sur fenêtre glissante
-- [ ] Tests pytest : parsers des 3 sources, contrats Pydantic
-
-**Livrable** : Dashboard météo fonctionnel, 3 sources ingérées automatiquement.
+| Item | Notes |
+|---|---|
+| Enrichissement pédologique | INRAE GéoSol — type sol, texture, pH moyen zone |
+| Enrichissement automatique parcelle | Pull météo + DVF + BSS depuis coords au moment de la saisie |
+| Comparaison multi-parcelles | Tableau side-by-side + radar chart Streamlit |
+| Outil planification culturale | Rotations basiques, calendrier semis/récolte |
+| Module documentation ferme | Markdown searchable via DuckDB FTS |
+| Couverture de tests étendue | Cibler 80 %+ de couverture |
+| Documentation technique | `docs/` — architecture, schémas, guide utilisateur |
+| Rétrospective & roadmap Phase 5+ | Ajustements sur base usage réel |
 
 ---
 
-### Phase 2 — Données personnelles + enrichissement open data (M3–M4)
-
-**Objectif** : Intégrer les données de la ferme et enrichir le datalake géographique et foncier.
-
-- [ ] Module ingestion **comptabilité** (CSV → Parquet, schéma Pydantic)
-- [ ] Module ingestion **heures travail** (formulaire Streamlit + CSV)
-- [ ] Module ingestion **sondes terrain** (à adapter selon matériel)
-- [ ] Ingestion **DVF** (prix transactions foncières, filtré zone géographique)
-- [ ] Ingestion **BRGM BSS** (forages et points d'eau référencés)
-- [ ] Ingestion **ADES** (piézométrie locale si données disponibles)
-- [ ] Dashboard **synthèse datalake** : état de chaque source (dernière MAJ, nb lignes, alertes)
-- [ ] Page dashboard **comptabilité** : marges, CA, charges fixes/variables
-
-**Livrable** : Vision consolidée des données ferme + open data foncier/eau.
-
----
-
-### Phase 3 — Outil d'aide à l'implantation v1 (M5–M7)
-
-**Objectif** : Permettre de saisir des parcelles candidates, les enrichir automatiquement, et comparer des scénarios.
-
-#### Modèle de données `Parcelle`
-
-```python
-class Parcelle(BaseModel):
-    id: str
-    nom: str
-    surface_ha: float
-    commune: str
-    departement: str
-    coords_centroid: tuple[float, float]           # lat/lon WGS84
-    prix_achat: float | None
-    prix_location_annuel: float | None
-
-    # Eau
-    acces_eau: Literal["forage", "riviere", "reseau", "aucun", "inconnu"]
-    debit_estime_m3h: float | None
-    distance_cours_eau_m: float | None
-
-    # Topographie
-    pente_pct: float | None
-    exposition: Literal["N","NE","E","SE","S","SO","O","NO","plat"] | None
-    altitude_m: float | None
-    risque_gel_tardif: bool | None
-
-    # Logistique
-    distance_marche_km: float | None
-    distance_agglo_km: float | None
-    acces_vehicule: Literal["facile","limite","difficile"]
-
-    notes: str = ""
-    statut: Literal["prospect","visite","evalue","archive"] = "prospect"
-```
-
-#### Moteur de scoring
-
-- Critères pondérables par l'utilisateur (curseurs dans l'UI)
-- Score 0–100 par critère, agrégation pondérée
-- Trois axes principaux (selon tes priorités) :
-  1. **Économique & logistique** (prix/ha vs zone, accessibilité, bassins de conso proches)
-  2. **Eau & irrigation** (accès, débit, pluviométrie locale issue datalake)
-  3. **Topographie & exposition** (pente, orientation, risque gel, altitude)
-
-#### Enrichissement automatique depuis le datalake
-
-- Pull météo locale (pluviométrie moyenne, jours de gel, ETP) depuis Open-Meteo via coords
-- Pull prix foncier médian de la zone (DVF, SAFER si dispo) pour contextualiser le prix demandé
-- Pull forages BRGM dans un rayon configurable
-
-#### Interface Streamlit — pages
-
-1. **Mes parcelles** — liste, statuts, carte Folium globale
-2. **Saisie / édition parcelle** — formulaire + enrichissement auto
-3. **Analyse parcelle** — scores par axe, radar chart, données enrichies
-4. **Comparaison scénarios** — tableau side-by-side, export Markdown/PDF
-
-**Livrable** : Comparer 3 parcelles candidates avec scores et carte.
-
----
-
-### Phase 4 — Consolidation & profondeur (M8–M12)
-
-**Objectif** : Affiner sur la base de l'usage réel, ajouter de la profondeur analytique.
-
-- [ ] Historisation des données personnelles (accumulation sur saisons)
-- [ ] Module **documentation** intégré (Markdown searchable via DuckDB FTS)
-- [ ] Enrichissement pédologique (INRAE GéoSol — type sol, texture, pH moyen zone)
-- [ ] Outil **planification culturale** basique (rotations, calendrier semis/récolte)
-- [ ] Export rapport implantation (PDF structuré via WeasyPrint ou reportlab)
-- [ ] Couverture de tests étendue
-- [ ] Documentation technique complète (`docs/`)
-- [ ] Rétrospective : ajustements roadmap Phase 5+
-
----
-
-## 6. Points d'attention & décisions à prendre
+## 6. Points d'attention & décisions prises
 
 ### Données personnelles & confidentialité
 
-Les données personnelles (comptabilité, heures) ne doivent **jamais** être committées dans Git.
-Règle : tout ce qui est sous `datalake/raw/perso/` et `datalake/processed/perso/` est dans `.gitignore`.
-Envisager un `.env` local pour les chemins sensibles.
+Tout ce qui est sous `datalake/raw/perso/`, `datalake/processed/perso/` et `datalake/reports/` est dans `.gitignore`. `config.local.toml` (coords réelles de la ferme) également.
 
-### Identifiant parcelle et géoréférencement
+### Identifiant parcelle
 
-Utiliser le **numéro de parcelle cadastrale** (format : `{dept}{commune}{section}{numero}`) comme identifiant stable, complété par les coordonnées GPS du centroïde. Cela permet le croisement avec RPG et DVF.
+Format retenu : `{dept}{commune}_{annee}_{seq}` (ex : `72181_2026_0042`). Permet le croisement avec RPG et DVF. Les JSONs de parcelles sont persistés sous `datalake/raw/perso/parcelles/`.
 
-### Scheduler : cron vs APScheduler
+### Scheduler Windows
 
-Pour démarrer : `cron` système suffit (fiable, sans dépendance Python).
-APScheduler devient pertinent quand on veut gérer les échecs, les retries et un log centralisé.
+Windows Scheduled Tasks via PowerShell (`Register-ScheduledTask`) retenu au lieu d'APScheduler — plus fiable en production Windows, pas de processus Python toujours actif requis. APScheduler reste disponible dans `ingestion/meteo/open_meteo.py` pour usage ad-hoc.
 
-### Versioning des données
+### Hub'eau API — particularités connues
 
-Les fichiers Parquet sont partitionnés par `source/annee/mois` — cela donne une forme naturelle de versioning sans DVC. DVC peut être envisagé à partir de la Phase 4 si le volume de données personnelles le justifie.
+- Coordonnées exposées sous `x`/`y` (pas `longitude`/`latitude`)
+- `codes_bdlisa` est une liste — prendre `[0]`
+- `altitude_station` est une string — caster en float
+- Offset max : `page × size ≤ 20 000` — paginer en conséquence
+- Paramètre `distance` non supporté sur `/stations` → utiliser `bbox` + filtre haversine local
 
-### Accès mobile / tablette
+### Comptabilité
 
-Streamlit est responsive par défaut. Si un accès terrain (tablette) est nécessaire, envisager un accès réseau local (Streamlit sur le serveur/NAS, accès WiFi ferme).
+hledger retenu comme outil de saisie (plain-text accounting). Module d'ingestion à développer une fois hledger configuré et premiers exports disponibles.
 
 ---
 
 ## 7. Métriques de succès
 
-| Métrique | Cible Phase 1 | Cible Phase 3 |
+| Métrique | Cible initiale | Réalisé (Phase 3) |
 |---|---|---|
-| Sources ingérées automatiquement | 3 | 8+ |
-| Couverture tests (parsers + scoring) | 60 % | 80 % |
-| Temps de chargement dashboard météo | < 2 s | < 2 s |
-| Parcelles modélisables dans l'outil | — | ≥ 10 |
-| Temps pour comparer 2 parcelles | — | < 5 min (saisie → score) |
+| Sources open data ingérées automatiquement | 3 (Phase 1) | **6** (météo, RNM, RPG, DVF, BSS, ADES) |
+| Tests pytest | 60 % couverture | **127 tests** (parsers + scoring) |
+| Temps de chargement dashboard météo | < 2 s | < 2 s ✅ |
+| Parcelles modélisables dans l'outil | ≥ 10 | Illimité (JSON + Parquet) ✅ |
+| Temps pour comparer 2 parcelles | < 5 min (saisie → score) | ~2 min (formulaire → score → PDF) ✅ |
+| Rapport PDF implantation | Phase 4 initialement | **Livré en Phase 3** ✅ |
 
 ---
 
-*Ce document est vivant. Il sera mis à jour à chaque fin de phase.*
+## 8. Archives — Phases 0–3 (livré)
+
+### Phase 0 — Bootstrap ✅
+
+| Item | Notes |
+|---|---|
+| `pyproject.toml` avec uv | Python 3.10+, dépendances core + reportlab |
+| Structure dossiers | Conforme section 3.3 |
+| `.gitignore` | Données brutes, duckdb, perso/, config.local.toml |
+| `config.toml` + `config.local.toml` | Coords ferme réelles dans local (Sarthe, 47.8474 / -0.9416) |
+| Ingestion Open-Meteo | Parquet partitionné par an, DuckDB validé |
+| README | Installation, premier run |
+
+### Phase 1 — Datalake fondations ✅
+
+| Item | Notes |
+|---|---|
+| Ingestion météo Open-Meteo | 2021–2026, 1 917 jours, Parquet partitionné par an |
+| Ingestion prix RNM | A24+A25+A26 via ZIP locaux, stade Expédition départ bassin |
+| Ingestion RPG 2023 | 67 081 parcelles, 185 833 ha, 98 cultures, rayon 25 km |
+| Catalogues YAML | `meteo_open_meteo.yaml`, `prix_rnm.yaml`, `geo_rpg.yaml` |
+| Dashboard météo | `1_Météo.py` — températures, pluie, ETP, bilan hydrique |
+| Dashboard prix | `2_Prix.py` — évolution, distribution, saisonnalité |
+| Dashboard tableau de bord | `0_Tableau_de_Bord.py` — état sources, alertes fraîcheur |
+| Scheduler Windows | Météo daily 6h, RNM vendredi 7h · logs `datalake/logs/` |
+| Tests | 103 tests — open_meteo, rnm, rpg |
+
+### Phase 2 — Données personnelles + enrichissement geo ✅
+
+| Item | Notes |
+|---|---|
+| Ingestion DVF | `ingestion/prix/dvf.py` — filtre zone géographique, Parquet annuel |
+| Catalogue YAML DVF | `datalake/catalog/prix_dvf.yaml` |
+| Ingestion BRGM BSS | `ingestion/geo/bss.py` — Hub'eau API, bbox+haversine, 5 stations locales |
+| Catalogue YAML BSS | `datalake/catalog/geo_bss.yaml` |
+| Ingestion ADES | `ingestion/geo/ades.py` — Hub'eau /chroniques, batching, 24 tests |
+| Catalogue YAML ADES | `datalake/catalog/geo_ades.yaml` |
+| Module heures de travail | `ingestion/perso/heures.py` — CLI start/stop/add/list/ingest/verify, NLP durée+date |
+| Tests ajoutés | dvf (9), bss (21), ades (24), heures (35) → total **127 tests** |
+
+### Phase 3 — Outil d'aide à l'implantation v1 ✅
+
+| Item | Notes |
+|---|---|
+| Modèle Pydantic Parcelle | `implantation/models/parcelle.py` — 26 champs validés |
+| Moteur scoring | `implantation/scoring/` — 13 critères, 3 axes pondérables (éco/eau/topo) |
+| Tests implantation | `tests/test_implantation.py` — 47 tests |
+| UI formulaire parcelle | `app/pages/3_Parcelle.py` — saisie, validation, scoring temps réel |
+| Persistance parcelle | `app/components/parcelle.py` — JSON sous `datalake/raw/perso/parcelles/` |
+| Rapport implantation PDF | `implantation/reports/pdf_report.py` — reportlab, 2 pages A4, barres de score colorées, bouton download Streamlit |
