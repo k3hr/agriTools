@@ -27,6 +27,8 @@ from __future__ import annotations
 import argparse
 import io
 import logging
+import re
+import zipfile
 from datetime import date
 from pathlib import Path
 
@@ -151,6 +153,81 @@ def resources_for_years(target_years: list[int], timeout: int = 20) -> list[dict
             f"Disponibles : {available}"
         )
     return matched
+
+
+def _extract_year_from_filename(filename: str) -> int | None:
+    """Déduit l'année depuis un nom de fichier RNM, par exemple A24 -> 2024."""
+    year = _extract_year(filename)
+    if year is not None:
+        return year
+    m = re.search(r"A(\d{2})(?!\d)", filename, re.IGNORECASE)
+    if m:
+        return 2000 + int(m.group(1))
+    return None
+
+
+def find_local_zip_resources(project_root: Path) -> list[dict]:
+    """Recherche les archives RNM locales stockées à la racine du projet."""
+    resources = []
+    for path in sorted(project_root.glob("COT-MUL-prd_RNM-*.zip")):
+        year = _extract_year_from_filename(path.name)
+        if year is None:
+            continue
+        resources.append({
+            "title": path.name,
+            "path": path,
+            "year": year,
+            "format": "ZIP",
+        })
+    return resources
+
+
+def _extract_zip_members(path: Path) -> list[tuple[str, bytes, str]]:
+    """Retourne les fichiers supportés contenus dans l'archive ZIP."""
+    results: list[tuple[str, bytes, str]] = []
+    with zipfile.ZipFile(path, "r") as archive:
+        for member in archive.infolist():
+            if member.is_dir():
+                continue
+            name = member.filename
+            lower = name.lower()
+            if lower.endswith(".csv"):
+                results.append(("csv", archive.read(member), name))
+            elif lower.endswith(('.xls', '.xlsx')):
+                results.append(("excel", archive.read(member), name))
+    return results
+
+
+def parse_excel(raw: bytes, year: int, source: str | None = None) -> pl.DataFrame:
+    """Parse un fichier Excel en DataFrame normalisée."""
+    try:
+        import pandas as pd
+    except ImportError as exc:
+        raise RuntimeError("Pandas est requis pour parser les fichiers Excel RNM") from exc
+
+    df = pd.read_excel(io.BytesIO(raw), engine=None)
+    df = pl.from_pandas(df)
+    df = normalize(df)
+
+    if df["annee"].null_count() == len(df):
+        df = df.with_columns(pl.lit(year).cast(pl.Int32).alias("annee"))
+    return df
+
+
+def parse_zip(path: Path, year: int) -> pl.DataFrame:
+    """Parse un fichier ZIP local RNM et retourne une DataFrame unifiée."""
+    members = _extract_zip_members(path)
+    if not members:
+        raise RuntimeError(f"Aucun fichier CSV ou Excel trouvé dans l'archive {path.name}")
+
+    dfs: list[pl.DataFrame] = []
+    for kind, raw, name in members:
+        if kind == "csv":
+            dfs.append(parse_csv(raw, year))
+        else:
+            dfs.append(parse_excel(raw, year, source=name))
+
+    return pl.concat(dfs, how="vertical") if len(dfs) > 1 else dfs[0]
 
 
 # ---------------------------------------------------------------------------
@@ -339,7 +416,7 @@ def verify(processed_dir: Path) -> None:
             print(f"  Origines         : {result[5]}")
             print("─────────────────────────────────────────────────────────\n")
     except Exception as e:
-        log.error(f"Erreur vérification : {e}")
+        log.error(f"Erreur verification : {e}")
 
 
 def list_marches(processed_dir: Path) -> None:
@@ -384,6 +461,9 @@ def run(
     raw_dir       = Path(cfg["paths"]["raw"]) / "prix" / "rnm"
     raw_dir.mkdir(parents=True, exist_ok=True)
 
+    project_root = Path(__file__).resolve().parents[2]
+    local_resources = find_local_zip_resources(project_root)
+
     if verify_only:
         verify(processed_dir)
         return []
@@ -392,35 +472,49 @@ def run(
         current_year = date.today().year
         target_years = list(range(current_year - hist, current_year + 1))
 
-    log.info(f"RNM backfill — années : {target_years}")
-    log.info(f"Marchés filtrés : {marches or 'tous'} | Stades : {stades}")
+    log.info(f"RNM backfill - annees : {target_years}")
+    log.info(f"Marches filtres : {marches or 'tous'} | Stades : {stades}")
 
-    resources = resources_for_years(target_years)
-    log.info(f"  {len(resources)} ressource(s) trouvée(s) sur data.gouv.fr")
+    if local_resources:
+        resources = [r for r in local_resources if r["year"] in target_years]
+        if not resources:
+            available = sorted({r["year"] for r in local_resources})
+            raise ValueError(
+                f"Annees demandees {target_years} non trouvees parmi les archives locales. "
+                f"Disponibles : {available}"
+            )
+        log.info(f"  {len(resources)} archive(s) locale(s) RNM utilisee(s)")
+    else:
+        resources = resources_for_years(target_years)
+        log.info(f"  {len(resources)} ressource(s) trouvee(s) sur data.gouv.fr")
 
     results = []
     for r in resources:
         year = r["year"]
-        log.info(f"\n── Année {year} ── {r['title']}")
+        log.info(f"\n-- Annee {year} -- {r['title']}")
 
-        # Cache raw
-        raw_path = raw_dir / f"rnm_{year}.csv"
-        if raw_path.exists():
-            log.info(f"  Cache raw : {raw_path.name}")
-            raw = raw_path.read_bytes()
+        if r.get("path"):
+            df = parse_zip(r["path"], year)
+            log.info(f"  {len(df):,} lignes apres lecture de l'archive locale")
         else:
-            raw = download_bytes(r["url"])
-            raw_path.write_bytes(raw)
+            # Cache raw
+            raw_path = raw_dir / f"rnm_{year}.csv"
+            if raw_path.exists():
+                log.info(f"  Cache raw : {raw_path.name}")
+                raw = raw_path.read_bytes()
+            else:
+                raw = download_bytes(r["url"])
+                raw_path.write_bytes(raw)
 
-        df = parse_csv(raw, year)
-        log.info(f"  {len(df):,} lignes avant filtre")
+            df = parse_csv(raw, year)
+            log.info(f"  {len(df):,} lignes avant filtre")
 
         df = apply_filters(df, marches, stades)
-        log.info(f"  {len(df):,} lignes après filtre")
+        log.info(f"  {len(df):,} lignes apres filtre")
 
         if len(df) == 0:
-            log.warning(f"  ⚠ Aucune donnée après filtre — vérifie les noms de marchés dans config.toml")
-            log.warning(f"  Conseil : lance --list-marches pour voir les noms exacts")
+            log.warning("  WARNING: Aucune donnee apres filtre - verifie les noms de marches dans config.toml")
+            log.warning("  Conseil : lance --list-marches pour voir les noms exacts")
         else:
             save_parquet(df, processed_dir, year)
 
@@ -431,13 +525,13 @@ def run(
                 .sort("n", descending=True)
                 .head(5)
             )
-            log.info("  Top produits cotés :")
+            log.info("  Top produits cotes :")
             for row in top.iter_rows(named=True):
                 log.info(f"    {row['produit']:35s} {row['n']:5d} cotations")
 
         results.append(df)
 
-    log.info("\nIngestion RNM terminée ✓")
+    log.info("\nIngestion RNM terminee")
     return results
 
 

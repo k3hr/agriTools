@@ -138,9 +138,9 @@ agriTools/
 
 - [X] Initialiser `pyproject.toml` avec `uv` (Python 3.12, dépendances core)
 - [X] Créer la structure de dossiers du dépôt
-- [ ] Configurer `.gitignore` (données brutes, duckdb, perso/, secrets)
-- [ ] Écrire `config.toml` : chemins absolus configurables, pas de hardcode
-- [ ] Premier script d'ingestion : **Open-Meteo** (point GPS de référence → Parquet)
+- [X] Configurer `.gitignore` (données brutes, duckdb, perso/, secrets)
+- [X] Écrire `config.toml` : chemins absolus configurables, pas de hardcode
+- [X] Premier script d'ingestion : **Open-Meteo** (point GPS de référence → Parquet)
 - [ ] Vérifier que DuckDB interroge le Parquet produit
 - [ ] README opérationnel (installation, premier run)
 
@@ -153,7 +153,7 @@ agriTools/
 **Objectif** : Avoir un datalake vivant avec les données open data essentielles et un premier dashboard.
 
 - [ ] Ingestion **météo** complète (historical backfill 5 ans + cron quotidien)
-- [ ] Ingestion **prix MIN** (FranceAgriMer RNM — marchés de référence région)
+- [X] Ingestion **prix MIN** (FranceAgriMer RNM — marchés de référence région, local ZIP support ajouté)
 - [ ] Ingestion **RPG** (Registre Parcellaire Graphique — couverture département)
 - [ ] Catalogue YAML pour chaque dataset (source, schéma, fréquence MAJ, licence)
 - [ ] Scheduler APScheduler : météo quotidien, prix hebdomadaire
