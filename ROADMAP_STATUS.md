@@ -1,7 +1,7 @@
 # agriTools — Roadmap Status
 
 **Dernière mise à jour :** 2026-04-04
-**Session :** Sprint initial (2 jours) + Phase 2 DVF + BSS + heures + Phase 3 scoring preview
+**Session :** Sprint initial (2 jours) + Phase 2 DVF + BSS + heures + ADES + Phase 3 scoring preview
 
 ---
 
@@ -11,7 +11,7 @@
 |---|---|---|
 | Phase 0 | Bootstrap | ✅ Terminée |
 | Phase 1 | Datalake fondations | ✅ Terminée |
-| Phase 2 | Données personnelles + enrichissement geo | 🟡 En cours (DVF + BSS + heures) |
+| Phase 2 | Données personnelles + enrichissement geo | 🟡 En cours (compta + sondes) |
 | Phase 3 | Outil d'aide à l'implantation v1 | 🟡 En cours (UI parcelle) |
 | Phase 4 | Consolidation & profondeur | ⬜ Non démarrée |
 
@@ -30,7 +30,7 @@
 | Dashboard Streamlit météo | ✅ | `app/pages/1_Météo.py` — températures, pluie, ETP, bilan hydrique |
 | Dashboard Streamlit prix | ✅ | `app/pages/2_Prix.py` — évolution, distribution, saisonnalité |
 | Dashboard Streamlit datalake | ✅ | `app/pages/0_Tableau_de_Bord.py` — état santé sources, alertes fraîcheur |
-| Tests pytest | ✅ | **103/103** — open_meteo, rnm, rpg, implantation, dvf, bss, heures |
+| Tests pytest | ✅ | **127/127** — open_meteo, rnm, rpg, implantation, dvf, bss, heures, ades |
 | Scheduler Tâches planifiées | ✅ | Windows scheduled tasks : météo 6h quotidien, RNM vendredi 7h, logs `datalake/logs/` |
 | Pydantic contracts sur parsers | 🔵 | Déplacé en Phase 4 — parsers déjà robustes, priorité basse pour usage solo |
 
@@ -49,7 +49,7 @@
 | Ingestion BRGM BSS (forages) | ✅ | `ingestion/geo/bss.py` — Hub'eau API, bbox+haversine, 5 stations, 21 tests |
 | Catalogue YAML BSS | ✅ | `datalake/catalog/geo_bss.yaml` |
 | Module heures de travail | ✅ | `ingestion/perso/heures.py` — CLI start/stop/add/list/ingest/verify, parser NLP durée+date, 35 tests |
-| Ingestion ADES (piézométrie) | ⬜ | Données locales si disponibles |
+| Ingestion ADES (piézométrie) | ✅ | `ingestion/geo/ades.py` — Hub'eau /chroniques, batching par station, 24 tests |
 | Dashboard synthèse datalake | ✅ | `app/pages/0_Tableau_de_Bord.py` — état sources, alertes fraîcheur |
 | Page dashboard comptabilité | ⬜ | Marges, CA, charges fixes/variables |
 
