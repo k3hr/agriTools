@@ -362,8 +362,11 @@ def parse_csv(raw: bytes, year: int) -> pl.DataFrame:
                     .str.extract(r"(\d{4})", 1)  # Capture le groupe 1 (l'année)
                     .cast(pl.Int32)
                 )
-                df = df.with_columns(annee=extracted_years)
-                log.debug(f"  Année extraite depuis la colonne date")
+                if extracted_years.null_count() < len(extracted_years):
+                    df = df.with_columns(annee=extracted_years)
+                    log.debug(f"  Année extraite depuis la colonne date")
+                else:
+                    df = df.with_columns(pl.lit(year).cast(pl.Int32).alias("annee"))
             except Exception:
                 df = df.with_columns(pl.lit(year).cast(pl.Int32).alias("annee"))
         else:
@@ -475,124 +478,4 @@ def run(
     cfg = load_config()
     marches = None if all_marches else cfg.get("prix", {}).get("marches", [])
     stades  = cfg.get("prix", {}).get("stades", ["GROS"])
-    hist    = cfg.get("prix", {}).get("historical_years", 5)
-
-    processed_dir = Path(cfg["paths"]["processed"]) / "prix"
-    raw_dir       = Path(cfg["paths"]["raw"]) / "prix" / "rnm"
-    raw_dir.mkdir(parents=True, exist_ok=True)
-
-    project_root = Path(__file__).resolve().parents[2]
-    local_resources = find_local_zip_resources(project_root)
-
-    if verify_only:
-        verify(processed_dir)
-        return []
-
-    if target_years is None:
-        current_year = date.today().year
-        target_years = list(range(current_year - hist, current_year + 1))
-
-    log.info(f"RNM backfill - annees : {target_years}")
-    log.info(f"Marches filtres : {marches or 'tous'} | Stades : {stades}")
-
-    if local_resources:
-        resources = [r for r in local_resources if r["year"] in target_years]
-        if not resources:
-            available = sorted({r["year"] for r in local_resources})
-            raise ValueError(
-                f"Annees demandees {target_years} non trouvees parmi les archives locales. "
-                f"Disponibles : {available}"
-            )
-        log.info(f"  {len(resources)} archive(s) locale(s) RNM utilisee(s)")
-    else:
-        resources = resources_for_years(target_years)
-        log.info(f"  {len(resources)} ressource(s) trouvee(s) sur data.gouv.fr")
-
-    results = []
-    for r in resources:
-        year = r["year"]
-        log.info(f"\n-- Annee {year} -- {r['title']}")
-
-        if r.get("path"):
-            df = parse_zip(r["path"], year)
-            log.info(f"  {len(df):,} lignes apres lecture de l'archive locale")
-        else:
-            # Cache raw
-            raw_path = raw_dir / f"rnm_{year}.csv"
-            if raw_path.exists():
-                log.info(f"  Cache raw : {raw_path.name}")
-                raw = raw_path.read_bytes()
-            else:
-                raw = download_bytes(r["url"])
-                raw_path.write_bytes(raw)
-
-            df = parse_csv(raw, year)
-            log.info(f"  {len(df):,} lignes avant filtre")
-
-        df = apply_filters(df, marches, stades)
-        log.info(f"  {len(df):,} lignes apres filtre")
-
-        if len(df) == 0:
-            log.warning("  WARNING: Aucune donnee apres filtre - verifie les noms de marches dans config.toml")
-            log.warning("  Conseil : lance --list-marches pour voir les noms exacts")
-        else:
-            save_parquet(df, processed_dir, year)
-
-            # Aperçu top produits
-            top = (
-                df.group_by("produit")
-                .agg(pl.len().alias("n"))
-                .sort("n", descending=True)
-                .head(5)
-            )
-            log.info("  Top produits cotes :")
-            for row in top.iter_rows(named=True):
-                log.info(f"    {row['produit']:35s} {row['n']:5d} cotations")
-
-        results.append(df)
-
-    log.info("\nIngestion RNM terminee")
-    return results
-
-
-# ---------------------------------------------------------------------------
-# Point d'entrée
-# ---------------------------------------------------------------------------
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Ingestion RNM — FranceAgriMer / data.gouv.fr")
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument("--year",   type=int,        help="Année unique")
-    group.add_argument("--years",  type=int, nargs=2, metavar=("FROM", "TO"),
-                       help="Plage d'années (ex: --years 2020 2023)")
-    parser.add_argument("--all-marches",  action="store_true", help="Pas de filtre marché")
-    parser.add_argument("--verify",       action="store_true", help="Résumé Parquet existant")
-    parser.add_argument("--list-marches", action="store_true", help="Liste les marchés dans les données")
-    parser.add_argument("--list-produits",action="store_true", help="Top 50 produits cotés")
-    args = parser.parse_args()
-
-    cfg = load_config()
-    processed_dir = Path(cfg["paths"]["processed"]) / "prix"
-
-    if args.list_marches:
-        list_marches(processed_dir)
-        return
-    if args.list_produits:
-        list_produits(processed_dir)
-        return
-
-    if args.year:
-        years = [args.year]
-    elif args.years:
-        years = list(range(args.years[0], args.years[1] + 1))
-    else:
-        years = None
-
-    run(
-        target_years=years,
-        all_marches=args.all_marches,
-        verify_only=args.verify,
-    )
-
-
-if __name__ == "__main__":
-    main()
+    hist    = c

@@ -72,5 +72,5 @@ date_col      = "date"
 date_format   = "%Y-%m-%d"
 
 [compta]
-# Répertoire des exports hledger (.journal) ou CSV
+# Répertoire des exports CSV de comptabilité
 input_dir = "datalake/raw/perso/compta"
