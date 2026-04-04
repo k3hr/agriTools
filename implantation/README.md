@@ -137,6 +137,11 @@ print(score.global_score)  # Score recalculé avec les nouveaux poids
 
 ### Comparaison multi-parcelle
 
+La comparaison multi-parcelle permet de trier et visualiser plusieurs parcelles enregistrées côte à côte.
+
+- `engine.score_multiple()` trie et renvoie les scores des parcelles sélectionnées.
+- La page Streamlit dédiée `4_Comparaison_Parcelles.py` permet de comparer jusqu'à 4 parcelles enregistrées.
+
 ```python
 parcelles = [parcelle_1, parcelle_2, parcelle_3]
 
@@ -148,6 +153,24 @@ scores = engine.score_multiple(
 for s in scores:
     print(f"{s.global_score:3d}/100  {s.parcelle_nom:20s}")
 ```
+
+### Page Streamlit de comparaison
+
+Dans `app/pages/4_Comparaison_Parcelles.py`, les parcelles sauvegardées sont chargées depuis `datalake/raw/perso/parcelles/` et comparées avec :
+
+```python
+from app.components.parcelle import load_parcelles
+from implantation.scoring.engine import ScoringEngine
+
+parcelles = load_parcelles()
+engine = ScoringEngine()
+scores = engine.score_multiple(parcelles, sort_by_score=True)
+```
+
+La page affiche :
+- un tableau résumé des scores globaux et des axes,
+- une visualisation bar chart par axe,
+- des détails de critères pour chaque parcelle.
 
 ---
 

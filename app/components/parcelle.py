@@ -46,3 +46,17 @@ def list_parcelles() -> list[dict[str, Any]]:
         except Exception:
             continue
     return parcels
+
+
+def load_parcelles() -> list[Parcelle]:
+    """Load saved parcels from JSON files and return them as Parcelle instances."""
+    path = _parcelles_dir()
+    files = sorted(path.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    parcels: list[Parcelle] = []
+    for file in files:
+        try:
+            data = json.loads(file.read_text(encoding="utf-8"))
+            parcels.append(Parcelle.model_validate(data))
+        except Exception:
+            continue
+    return parcels

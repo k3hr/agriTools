@@ -13,7 +13,7 @@
 | Phase 1 | Datalake fondations | ✅ Terminée |
 | Phase 2 | Données personnelles + enrichissement geo | ✅ Terminée |
 | Phase 3 | Outil d'aide à l'implantation v1 | ✅ Terminée |
-| Phase 4 | Consolidation & profondeur | 🔵 Backlog constitué, non démarrée |
+| Phase 4 | Consolidation & profondeur | 🔵 En cours (comparaison multi-parcelles ajouté) |
 
 ---
 
@@ -184,12 +184,25 @@ agriTools/
 |---|---|
 | Enrichissement pédologique | INRAE GéoSol — type sol, texture, pH moyen zone |
 | Enrichissement automatique parcelle | Pull météo + DVF + BSS depuis coords au moment de la saisie |
-| Comparaison multi-parcelles | Tableau side-by-side + radar chart Streamlit |
+| Comparaison multi-parcelles | ✅ Tableau side-by-side + bar chart Streamlit |
 | Outil planification culturale | Rotations basiques, calendrier semis/récolte |
 | Module documentation ferme | Markdown searchable via DuckDB FTS |
-| Couverture de tests étendue | Cibler 80 %+ de couverture |
-| Documentation technique | `docs/` — architecture, schémas, guide utilisateur |
-| Rétrospective & roadmap Phase 5+ | Ajustements sur base usage réel |
+| Couverture de tests étendue | 🔵 Tests `app/components/parcelle.py` et comparaison par charge |
+| Documentation technique | 🔵 Mise à jour `implantation/README.md` + feuille de route Phase 5 |
+| Rétrospective & roadmap Phase 5+ | ✅ Phase 5 planifié dans roadmap |
+
+---
+
+## 5. Phase 5 — Usage réel & industrialisation (planifié)
+
+| Item | Notes |
+|---|---|
+| Feedback terrain | Collecter les retours sur les premières parcelles comparées pour affiner les critères et les poids |
+| Documentation utilisateur | Guide d'usage Streamlit + process d'enrichissement des parcelles |
+| Enrichissement sol | Intégrer données pédologiques INRAE GéoSol et texture/pH dans le scoring |
+| Automatisation locale | Valider les tâches planifiées Windows + rapports PDF automatiques |
+| Gouvernance des données | Définir lifecycle raw/processed/perso et audit trails |
+| Pilotage multi-parcelles | Filtrage, tri et comparaison de lots plus larges | 
 
 ---
 
