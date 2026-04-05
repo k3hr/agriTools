@@ -130,3 +130,22 @@ def test_render_parcelle_preview_with_minimal_parcelle():
     assert payload["Suivi"]["notes"] == ""
     assert isinstance(payload["Suivi"]["date_creation"], str)
     assert isinstance(payload["Suivi"]["date_modification"], str)
+
+
+def test_render_parcelle_preview_when_score_is_none():
+    parcelle = Parcelle(
+        id="parcelle_no_score",
+        nom="Parcelle Sans Score",
+        surface_ha=2.1,
+        commune="Précigné",
+        departement="72",
+        coords_centroid=(47.768, -0.321),
+    )
+    fake_st = Mock()
+
+    payload = render_parcelle_preview(parcelle, fake_st, score=None)
+
+    fake_st.subheader.assert_called_once_with("Parcelle Sans Score (parcelle_no_score)")
+    fake_st.caption.assert_called_once_with("Précigné (72) • 2.1 ha")
+    fake_st.info.assert_called_once_with("Score non calcule pour le moment.")
+    fake_st.json.assert_called_once_with(payload)

@@ -70,11 +70,17 @@ def build_parcelle_preview(parcelle: Parcelle) -> dict[str, Any]:
     }
 
 
-def render_parcelle_preview(parcelle: Parcelle, st_module: Any) -> dict[str, Any]:
+def render_parcelle_preview(
+    parcelle: Parcelle,
+    st_module: Any,
+    score: Any = None,
+) -> dict[str, Any]:
     """Render a parcel preview and return the displayed payload."""
     payload = build_parcelle_preview(parcelle)
     st_module.subheader(f"{parcelle.nom} ({parcelle.id})")
     st_module.caption(f"{parcelle.commune} ({parcelle.departement}) • {parcelle.surface_ha} ha")
+    if score is None:
+        st_module.info("Score non calcule pour le moment.")
     st_module.json(payload)
     return payload
 
