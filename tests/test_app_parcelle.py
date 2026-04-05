@@ -234,3 +234,23 @@ def test_render_parcelle_preview_displays_three_axes_when_present():
     fake_st.metric.assert_any_call("Axe Economique", "81/100")
     fake_st.metric.assert_any_call("Axe Eau", "74/100")
     fake_st.metric.assert_any_call("Axe Topographie", "79/100")
+
+
+def test_render_parcelle_preview_accepts_unexpected_score_type():
+    parcelle = Parcelle(
+        id="parcelle_score_string",
+        nom="Parcelle Score Texte",
+        surface_ha=1.4,
+        commune="Vion",
+        departement="72",
+        coords_centroid=(47.821, -0.238),
+    )
+    fake_st = Mock()
+
+    payload = render_parcelle_preview(parcelle, fake_st, score="N/A")
+
+    fake_st.subheader.assert_called_once_with("Parcelle Score Texte (parcelle_score_string)")
+    fake_st.caption.assert_called_once_with("Vion (72) • 1.4 ha")
+    fake_st.info.assert_not_called()
+    fake_st.metric.assert_called_once_with("Score global", "N/A/100")
+    fake_st.json.assert_called_once_with(payload)
