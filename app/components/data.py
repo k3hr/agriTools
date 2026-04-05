@@ -19,6 +19,11 @@ def _processed_dir(source: str) -> str:
     return str(Path(cfg["paths"]["processed"]) / source / "*.parquet")
 
 
+def _meteo_france_dir() -> Path:
+    cfg = load_config()
+    return Path(cfg["paths"]["processed"]) / "meteo_france"
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_meteo(start: date | None = None, end: date | None = None) -> pl.DataFrame:
     """
@@ -88,6 +93,63 @@ def meteo_date_range() -> tuple[date, date]:
         SELECT MIN(date)::TEXT, MAX(date)::TEXT
         FROM read_parquet('{pattern}')
     """).fetchone()
+    return date.fromisoformat(row[0]), date.fromisoformat(row[1])
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_meteo_france(start: date | None = None, end: date | None = None) -> pl.DataFrame:
+    """
+    Charge les données Météo-France (DPObs) et les aligne sur le même schéma
+    que load_meteo() pour permettre la réutilisation des graphiques.
+
+    Colonne supplémentaire vs Open-Meteo : ensoleillement_min (INST).
+    Retourne un DataFrame vide si aucun Parquet Météo-France n'est disponible.
+    """
+    mf_dir = _meteo_france_dir()
+    if not mf_dir.exists() or not list(mf_dir.glob("*.parquet")):
+        return pl.DataFrame()
+
+    pattern = str(mf_dir / "*.parquet")
+    where_clauses: list[str] = []
+    if start:
+        where_clauses.append(f"date >= DATE '{start}'")
+    if end:
+        where_clauses.append(f"date <= DATE '{end}'")
+    where = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
+    return duckdb.sql(f"""
+        SELECT
+            date,
+            temperature_2m_max          AS t_max,
+            temperature_2m_min          AS t_min,
+            temperature_2m_mean         AS t_moy,
+            precipitation_sum           AS pluie_mm,
+            et0_fao_evapotranspiration  AS etp_mm,
+            wind_speed_10m_max          AS vent_kmh,
+            sunshine_duration_min       AS ensoleillement_min
+        FROM read_parquet('{pattern}')
+        {where}
+        ORDER BY date
+    """).pl()
+
+
+def meteo_france_date_range() -> tuple[date, date] | None:
+    """
+    Retourne (date_min, date_max) du datalake Météo-France.
+    Retourne None si aucun Parquet n'est disponible (non ingéré).
+    Non mis en cache : appelé une fois par session pour vérifier la disponibilité.
+    """
+    mf_dir = _meteo_france_dir()
+    if not mf_dir.exists() or not list(mf_dir.glob("*.parquet")):
+        return None
+
+    pattern = str(mf_dir / "*.parquet")
+    row = duckdb.sql(f"""
+        SELECT MIN(date)::TEXT, MAX(date)::TEXT
+        FROM read_parquet('{pattern}')
+    """).fetchone()
+    if not row or not row[0]:
+        return None
     return date.fromisoformat(row[0]), date.fromisoformat(row[1])
 
 

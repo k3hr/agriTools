@@ -157,11 +157,33 @@ def _resolve_column(columns: list[str], target: str) -> str | None:
     return None
 
 
+_THOUSANDS_SEP_RE = re.compile(r"^\d{1,3}(,\d{3})+$")
+
+
+def _normalize_french_float(value: str | None) -> str | None:
+    """Normalise un nombre français vers un float parseable.
+
+    - Séparateur de milliers (virgule avant groupes de 3 chiffres) : supprimé.
+      Ex. "125,000" → "125000", "1,234,567" → "1234567"
+    - Séparateur décimal (virgule hors du pattern milliers) : remplacé par '.'.
+      Ex. "125,50" → "125.50", "125000,5" → "125000.5"
+    """
+    if value is None:
+        return None
+    value = value.strip().replace(" ", "")
+    if _THOUSANDS_SEP_RE.match(value):
+        return value.replace(",", "")
+    return value.replace(",", ".")
+
+
 def _normalize_column(df: pl.DataFrame, name: str, dtype: pl.DataType) -> pl.Series:
     col_name = _resolve_column(df.columns, name)
     if col_name is None:
         return pl.Series(name, [None] * len(df)).cast(dtype)
-    return df[col_name].cast(dtype, strict=False).alias(name)
+    series = df[col_name]
+    if dtype == pl.Float64 and series.dtype == pl.Utf8:
+        series = series.map_elements(_normalize_french_float, return_dtype=pl.Utf8)
+    return series.cast(dtype, strict=False).alias(name)
 
 
 def _clean_departement(code: str | int | None) -> str | None:
