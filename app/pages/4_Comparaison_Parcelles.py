@@ -5,8 +5,14 @@ from __future__ import annotations
 
 import pandas as pd
 import streamlit as st
-from implantation.scoring.engine import ScoringEngine
+from app.components.comparaison import (
+    build_chart_data,
+    build_parcelle_options,
+    build_summary_df,
+    select_parcelles,
+)
 from app.components.parcelle import load_parcelles
+from implantation.scoring.engine import ScoringEngine
 
 st.set_page_config(
     page_title="Comparaison parcelles — agriTools",
@@ -30,7 +36,7 @@ if not parcelles:
     )
     st.stop()
 
-options = [f"{p.id} — {p.nom}" for p in parcelles]
+options = build_parcelle_options(parcelles)
 selected = st.multiselect(
     "Sélectionnez jusqu'à 4 parcelles à comparer",
     options,
@@ -42,37 +48,16 @@ if not selected:
     st.warning("Sélectionnez au moins une parcelle pour comparer.")
     st.stop()
 
-selected_parcelles = [p for p, label in zip(parcelles, options) if label in selected]
+selected_parcelles = select_parcelles(parcelles, selected)
 engine = ScoringEngine()
 scores = engine.score_multiple(selected_parcelles, sort_by_score=True)
 
 st.markdown("### Résumé des parcelles sélectionnées")
-summary_rows = []
-for score in scores:
-    summary_rows.append(
-        {
-            "Parcelle": score.parcelle_nom,
-            "ID": score.parcelle_id,
-            "Score global": score.global_score,
-            "Éco (35%)": score.score_economique_logistique.score,
-            "Eau (35%)": score.score_eau_irrigation.score,
-            "Topo (30%)": score.score_topographie_exposition.score,
-        }
-    )
-summary_df = pd.DataFrame(summary_rows).set_index("Parcelle")
+summary_df = build_summary_df(scores)
 st.dataframe(summary_df.sort_values("Score global", ascending=False))
 
 st.markdown("### Visualisation des axes de scoring")
-chart_data = pd.DataFrame(
-    {
-        score.parcelle_nom: {
-            "Économique": score.score_economique_logistique.score,
-            "Eau": score.score_eau_irrigation.score,
-            "Topographie": score.score_topographie_exposition.score,
-        }
-        for score in scores
-    }
-)
+chart_data = build_chart_data(scores)
 st.bar_chart(chart_data)
 
 st.markdown("### Détails par parcelle")
