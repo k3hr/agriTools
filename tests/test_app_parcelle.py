@@ -3,6 +3,7 @@ from unittest.mock import Mock
 
 from app.components.parcelle import render_parcelle_preview
 from implantation.models.parcelle import Parcelle
+from implantation.scoring.engine import AxisScore, ParcelleScore
 
 
 def test_render_parcelle_preview_with_complete_parcelle():
@@ -190,3 +191,46 @@ def test_render_parcelle_preview_when_score_is_hundred():
     fake_st.info.assert_not_called()
     fake_st.metric.assert_called_once_with("Score global", "100/100")
     fake_st.json.assert_called_once_with(payload)
+
+
+def test_render_parcelle_preview_displays_three_axes_when_present():
+    parcelle = Parcelle(
+        id="parcelle_axes",
+        nom="Parcelle Axes",
+        surface_ha=3.6,
+        commune="Parcé-sur-Sarthe",
+        departement="72",
+        coords_centroid=(47.834, -0.201),
+    )
+    score = ParcelleScore(
+        parcelle_id=parcelle.id,
+        parcelle_nom=parcelle.nom,
+        global_score=78,
+        score_economique_logistique=AxisScore(
+            name="Économique & Logistique",
+            score=81,
+            weight=0.35,
+            criteria={"prix_achat": 80},
+        ),
+        score_eau_irrigation=AxisScore(
+            name="Eau & Irrigation",
+            score=74,
+            weight=0.35,
+            criteria={"acces_eau": 70},
+        ),
+        score_topographie_exposition=AxisScore(
+            name="Topographie & Exposition",
+            score=79,
+            weight=0.30,
+            criteria={"pente": 82},
+        ),
+    )
+    fake_st = Mock()
+
+    render_parcelle_preview(parcelle, fake_st, score=score)
+
+    assert fake_st.metric.call_count == 4
+    fake_st.metric.assert_any_call("Score global", "78/100")
+    fake_st.metric.assert_any_call("Axe Economique", "81/100")
+    fake_st.metric.assert_any_call("Axe Eau", "74/100")
+    fake_st.metric.assert_any_call("Axe Topographie", "79/100")

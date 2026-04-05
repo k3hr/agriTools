@@ -70,6 +70,16 @@ def build_parcelle_preview(parcelle: Parcelle) -> dict[str, Any]:
     }
 
 
+def _iter_score_axes(score: Any) -> list[tuple[str, Any]]:
+    """Return available score axes from a ParcelleScore-like object."""
+    axes = [
+        ("Economique", getattr(score, "score_economique_logistique", None)),
+        ("Eau", getattr(score, "score_eau_irrigation", None)),
+        ("Topographie", getattr(score, "score_topographie_exposition", None)),
+    ]
+    return [(label, axis) for label, axis in axes if axis is not None and hasattr(axis, "score")]
+
+
 def render_parcelle_preview(
     parcelle: Parcelle,
     st_module: Any,
@@ -82,7 +92,10 @@ def render_parcelle_preview(
     if score is None:
         st_module.info("Score non calcule pour le moment.")
     else:
-        st_module.metric("Score global", f"{score}/100")
+        global_score = getattr(score, "global_score", score)
+        st_module.metric("Score global", f"{global_score}/100")
+        for axis_label, axis in _iter_score_axes(score):
+            st_module.metric(f"Axe {axis_label}", f"{axis.score}/100")
     st_module.json(payload)
     return payload
 
