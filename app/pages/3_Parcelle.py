@@ -11,7 +11,7 @@ from implantation.enrichment import ParcelleEnricher
 from implantation.models.parcelle import Parcelle
 from implantation.reports.pdf_report import generate_pdf
 from implantation.scoring.engine import ScoringEngine
-from app.components.parcelle import list_parcelles, save_parcelle
+from app.components.parcelle import list_parcelles, render_parcelle_preview, save_parcelle
 
 st.set_page_config(page_title="Parcelle — agriTools", page_icon="🧭", layout="wide")
 st.title("🧭 Parcelle candidate")
@@ -134,7 +134,7 @@ if submit:
         for warning in diagnostics.warnings:
             st.info(warning)
 
-        st.json(parcelle.model_dump())
+        render_parcelle_preview(parcelle, st)
 
         # Calculer et afficher le scoring
         st.markdown("---")

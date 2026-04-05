@@ -24,6 +24,61 @@ def _sanitize_filename(value: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]", "_", value)
 
 
+def build_parcelle_preview(parcelle: Parcelle) -> dict[str, Any]:
+    """Build a human-friendly preview payload for Streamlit rendering."""
+    data = parcelle.model_dump(mode="json")
+    return {
+        "Identite": {
+            "id": data["id"],
+            "nom": data["nom"],
+            "surface_ha": data["surface_ha"],
+            "commune": data["commune"],
+            "departement": data["departement"],
+            "coords_centroid": data["coords_centroid"],
+        },
+        "Economique": {
+            "prix_achat": data["prix_achat"],
+            "prix_location_annuel": data["prix_location_annuel"],
+            "prix_comparable_eur_ha": data["prix_comparable_eur_ha"],
+        },
+        "Eau_irrigation": {
+            "acces_eau": data["acces_eau"],
+            "debit_estime_m3h": data["debit_estime_m3h"],
+            "distance_cours_eau_m": data["distance_cours_eau_m"],
+            "forages_brgm_count": data["forages_brgm_count"],
+        },
+        "Topographie_logistique": {
+            "pente_pct": data["pente_pct"],
+            "exposition": data["exposition"],
+            "altitude_m": data["altitude_m"],
+            "risque_gel_tardif": data["risque_gel_tardif"],
+            "distance_marche_km": data["distance_marche_km"],
+            "distance_agglo_km": data["distance_agglo_km"],
+            "acces_vehicule": data["acces_vehicule"],
+        },
+        "Enrichissements": {
+            "meteo_precip_annuelle_mm": data["meteo_precip_annuelle_mm"],
+            "meteo_jours_gel": data["meteo_jours_gel"],
+            "meteo_etp_annuelle_mm": data["meteo_etp_annuelle_mm"],
+        },
+        "Suivi": {
+            "statut": data["statut"],
+            "notes": data["notes"],
+            "date_creation": data["date_creation"],
+            "date_modification": data["date_modification"],
+        },
+    }
+
+
+def render_parcelle_preview(parcelle: Parcelle, st_module: Any) -> dict[str, Any]:
+    """Render a parcel preview and return the displayed payload."""
+    payload = build_parcelle_preview(parcelle)
+    st_module.subheader(f"{parcelle.nom} ({parcelle.id})")
+    st_module.caption(f"{parcelle.commune} ({parcelle.departement}) • {parcelle.surface_ha} ha")
+    st_module.json(payload)
+    return payload
+
+
 def save_parcelle(parcelle: Parcelle) -> Path:
     """Save a parcel as a JSON file under datalake/raw/perso/parcelles."""
     target_dir = _parcelles_dir()
