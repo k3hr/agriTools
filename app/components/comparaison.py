@@ -26,6 +26,13 @@ def get_selection_message(selected_labels: list[str]) -> str | None:
     return None
 
 
+def get_selection_info_message(selected_labels: list[str]) -> str | None:
+    """Return an informational message for non-blocking selection states."""
+    if len(selected_labels) == 1:
+        return "Une seule parcelle sélectionnée : affichage comparatif en mode solo."
+    return None
+
+
 def build_summary_df(scores: list[Any]) -> pd.DataFrame:
     """Build the main side-by-side comparison table."""
     summary_rows = []

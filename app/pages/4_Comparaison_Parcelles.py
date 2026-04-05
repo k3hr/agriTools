@@ -9,6 +9,7 @@ from app.components.comparaison import (
     build_chart_data,
     build_parcelle_options,
     build_summary_df,
+    get_selection_info_message,
     get_selection_message,
     select_parcelles,
 )
@@ -51,6 +52,10 @@ if selection_message:
     st.stop()
 
 selected_parcelles = select_parcelles(parcelles, selected)
+selection_info_message = get_selection_info_message(selected)
+if selection_info_message:
+    st.info(selection_info_message)
+
 engine = ScoringEngine()
 scores = engine.score_multiple(selected_parcelles, sort_by_score=True)
 

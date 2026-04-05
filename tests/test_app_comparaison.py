@@ -2,6 +2,7 @@ from app.components.comparaison import (
     build_chart_data,
     build_parcelle_options,
     build_summary_df,
+    get_selection_info_message,
     get_selection_message,
     select_parcelles,
 )
@@ -91,3 +92,9 @@ def test_selecting_zero_parcelle_returns_empty_state_message():
     message = get_selection_message([])
 
     assert message == "Sélectionnez au moins une parcelle pour comparer."
+
+
+def test_selecting_one_parcelle_returns_solo_mode_message():
+    message = get_selection_info_message(["p1 — Parcelle Solo"])
+
+    assert message == "Une seule parcelle sélectionnée : affichage comparatif en mode solo."
