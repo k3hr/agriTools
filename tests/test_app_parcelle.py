@@ -170,3 +170,23 @@ def test_render_parcelle_preview_when_score_is_zero():
     fake_st.info.assert_not_called()
     fake_st.metric.assert_called_once_with("Score global", "0/100")
     fake_st.json.assert_called_once_with(payload)
+
+
+def test_render_parcelle_preview_when_score_is_hundred():
+    parcelle = Parcelle(
+        id="parcelle_top_score",
+        nom="Parcelle Parfaite",
+        surface_ha=2.7,
+        commune="Juigné-sur-Sarthe",
+        departement="72",
+        coords_centroid=(47.889, -0.286),
+    )
+    fake_st = Mock()
+
+    payload = render_parcelle_preview(parcelle, fake_st, score=100)
+
+    fake_st.subheader.assert_called_once_with("Parcelle Parfaite (parcelle_top_score)")
+    fake_st.caption.assert_called_once_with("Juigné-sur-Sarthe (72) • 2.7 ha")
+    fake_st.info.assert_not_called()
+    fake_st.metric.assert_called_once_with("Score global", "100/100")
+    fake_st.json.assert_called_once_with(payload)
