@@ -148,4 +148,25 @@ def test_render_parcelle_preview_when_score_is_none():
     fake_st.subheader.assert_called_once_with("Parcelle Sans Score (parcelle_no_score)")
     fake_st.caption.assert_called_once_with("Précigné (72) • 2.1 ha")
     fake_st.info.assert_called_once_with("Score non calcule pour le moment.")
+    fake_st.metric.assert_not_called()
+    fake_st.json.assert_called_once_with(payload)
+
+
+def test_render_parcelle_preview_when_score_is_zero():
+    parcelle = Parcelle(
+        id="parcelle_zero_score",
+        nom="Parcelle Score Zero",
+        surface_ha=3.0,
+        commune="Avoise",
+        departement="72",
+        coords_centroid=(47.851, -0.209),
+    )
+    fake_st = Mock()
+
+    payload = render_parcelle_preview(parcelle, fake_st, score=0)
+
+    fake_st.subheader.assert_called_once_with("Parcelle Score Zero (parcelle_zero_score)")
+    fake_st.caption.assert_called_once_with("Avoise (72) • 3.0 ha")
+    fake_st.info.assert_not_called()
+    fake_st.metric.assert_called_once_with("Score global", "0/100")
     fake_st.json.assert_called_once_with(payload)

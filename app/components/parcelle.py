@@ -81,6 +81,8 @@ def render_parcelle_preview(
     st_module.caption(f"{parcelle.commune} ({parcelle.departement}) • {parcelle.surface_ha} ha")
     if score is None:
         st_module.info("Score non calcule pour le moment.")
+    else:
+        st_module.metric("Score global", f"{score}/100")
     st_module.json(payload)
     return payload
 
