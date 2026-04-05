@@ -82,3 +82,51 @@ def test_render_parcelle_preview_with_complete_parcelle():
         "date_creation": "2026-04-01T09:30:00",
         "date_modification": "2026-04-02T18:15:00",
     }
+
+
+def test_render_parcelle_preview_with_minimal_parcelle():
+    parcelle = Parcelle(
+        id="parcelle_min_001",
+        nom="Parcelle Simple",
+        surface_ha=1.8,
+        commune="Louailles",
+        departement="72",
+        coords_centroid=(47.996, -0.153),
+    )
+    fake_st = Mock()
+
+    payload = render_parcelle_preview(parcelle, fake_st)
+
+    fake_st.subheader.assert_called_once_with("Parcelle Simple (parcelle_min_001)")
+    fake_st.caption.assert_called_once_with("Louailles (72) • 1.8 ha")
+    fake_st.json.assert_called_once_with(payload)
+
+    assert payload["Economique"] == {
+        "prix_achat": None,
+        "prix_location_annuel": None,
+        "prix_comparable_eur_ha": None,
+    }
+    assert payload["Eau_irrigation"] == {
+        "acces_eau": "inconnu",
+        "debit_estime_m3h": None,
+        "distance_cours_eau_m": None,
+        "forages_brgm_count": None,
+    }
+    assert payload["Topographie_logistique"] == {
+        "pente_pct": None,
+        "exposition": "plat",
+        "altitude_m": None,
+        "risque_gel_tardif": None,
+        "distance_marche_km": None,
+        "distance_agglo_km": None,
+        "acces_vehicule": "facile",
+    }
+    assert payload["Enrichissements"] == {
+        "meteo_precip_annuelle_mm": None,
+        "meteo_jours_gel": None,
+        "meteo_etp_annuelle_mm": None,
+    }
+    assert payload["Suivi"]["statut"] == "prospect"
+    assert payload["Suivi"]["notes"] == ""
+    assert isinstance(payload["Suivi"]["date_creation"], str)
+    assert isinstance(payload["Suivi"]["date_modification"], str)
