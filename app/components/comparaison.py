@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import pandas as pd
+import polars as pl
 
 
 def build_parcelle_options(parcelles: list[Any]) -> list[str]:
@@ -33,11 +33,10 @@ def get_selection_info_message(selected_labels: list[str]) -> str | None:
     return None
 
 
-def build_summary_df(scores: list[Any]) -> pd.DataFrame:
+def build_summary_df(scores: list[Any]) -> pl.DataFrame:
     """Build the main side-by-side comparison table."""
-    summary_rows = []
-    for score in scores:
-        summary_rows.append(
+    return pl.DataFrame(
+        [
             {
                 "Parcelle": score.parcelle_nom,
                 "ID": score.parcelle_id,
@@ -46,19 +45,23 @@ def build_summary_df(scores: list[Any]) -> pd.DataFrame:
                 "Eau (35%)": score.score_eau_irrigation.score,
                 "Topo (30%)": score.score_topographie_exposition.score,
             }
-        )
-    return pd.DataFrame(summary_rows).set_index("Parcelle")
-
-
-def build_chart_data(scores: list[Any]) -> pd.DataFrame:
-    """Build the axis chart dataset from parcelle scores."""
-    return pd.DataFrame(
-        {
-            score.parcelle_nom: {
-                "Économique": score.score_economique_logistique.score,
-                "Eau": score.score_eau_irrigation.score,
-                "Topographie": score.score_topographie_exposition.score,
-            }
             for score in scores
-        }
+        ]
+    )
+
+
+def build_chart_data(scores: list[Any]) -> pl.DataFrame:
+    """Build the axis chart dataset from parcelle scores (wide format, Axe column as x-axis)."""
+    return pl.DataFrame(
+        [
+            {
+                "Axe": axe,
+                **{score.parcelle_nom: getattr(score, attr).score for score in scores},
+            }
+            for axe, attr in [
+                ("Économique", "score_economique_logistique"),
+                ("Eau", "score_eau_irrigation"),
+                ("Topographie", "score_topographie_exposition"),
+            ]
+        ]
     )

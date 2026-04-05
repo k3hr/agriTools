@@ -3,7 +3,7 @@ Page de comparaison multi-parcelles enregistrées.
 """
 from __future__ import annotations
 
-import pandas as pd
+import polars as pl
 import streamlit as st
 from app.components.comparaison import (
     build_chart_data,
@@ -61,21 +61,24 @@ scores = engine.score_multiple(selected_parcelles, sort_by_score=True)
 
 st.markdown("### Résumé des parcelles sélectionnées")
 summary_df = build_summary_df(scores)
-st.dataframe(summary_df.sort_values("Score global", ascending=False))
+st.dataframe(summary_df.sort("Score global", descending=True))
 
 st.markdown("### Visualisation des axes de scoring")
 chart_data = build_chart_data(scores)
-st.bar_chart(chart_data)
+st.bar_chart(chart_data, x="Axe")
 
 st.markdown("### Détails par parcelle")
 for score in scores:
     with st.expander(f"{score.parcelle_nom} — Score global {score.global_score}/100", expanded=False):
-        details = {
-            "Score économique": score.score_economique_logistique.score,
-            "Score eau": score.score_eau_irrigation.score,
-            "Score topographie": score.score_topographie_exposition.score,
-        }
-        st.table(pd.DataFrame.from_dict(details, orient="index", columns=["Valeur"]))
+        details_df = pl.DataFrame({
+            "Métrique": ["Score économique", "Score eau", "Score topographie"],
+            "Valeur": [
+                score.score_economique_logistique.score,
+                score.score_eau_irrigation.score,
+                score.score_topographie_exposition.score,
+            ],
+        })
+        st.table(details_df)
 
         criterion_rows = []
         for criterion, crit_score in score.score_economique_logistique.criteria.items():
@@ -85,5 +88,5 @@ for score in scores:
         for criterion, crit_score in score.score_topographie_exposition.criteria.items():
             criterion_rows.append({"Axe": "Topographie", "Critère": criterion.replace("_", " ").title(), "Score": crit_score})
 
-        st.dataframe(pd.DataFrame(criterion_rows))
+        st.dataframe(pl.DataFrame(criterion_rows))
         st.markdown("---")
