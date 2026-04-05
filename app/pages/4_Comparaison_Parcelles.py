@@ -9,6 +9,7 @@ from app.components.comparaison import (
     build_chart_data,
     build_parcelle_options,
     build_summary_df,
+    get_selection_message,
     select_parcelles,
 )
 from app.components.parcelle import load_parcelles
@@ -44,8 +45,9 @@ selected = st.multiselect(
     max_selections=4,
 )
 
-if not selected:
-    st.warning("Sélectionnez au moins une parcelle pour comparer.")
+selection_message = get_selection_message(selected)
+if selection_message:
+    st.warning(selection_message)
     st.stop()
 
 selected_parcelles = select_parcelles(parcelles, selected)

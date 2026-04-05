@@ -19,6 +19,13 @@ def select_parcelles(parcelles: list[Any], selected_labels: list[str]) -> list[A
     return [p for p, label in zip(parcelles, options) if label in selected_labels]
 
 
+def get_selection_message(selected_labels: list[str]) -> str | None:
+    """Return the UI message for the current selection state."""
+    if not selected_labels:
+        return "Sélectionnez au moins une parcelle pour comparer."
+    return None
+
+
 def build_summary_df(scores: list[Any]) -> pd.DataFrame:
     """Build the main side-by-side comparison table."""
     summary_rows = []
@@ -48,4 +55,3 @@ def build_chart_data(scores: list[Any]) -> pd.DataFrame:
             for score in scores
         }
     )
-

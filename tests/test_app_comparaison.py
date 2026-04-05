@@ -2,6 +2,7 @@ from app.components.comparaison import (
     build_chart_data,
     build_parcelle_options,
     build_summary_df,
+    get_selection_message,
     select_parcelles,
 )
 from implantation.models.parcelle import Parcelle
@@ -84,3 +85,9 @@ def test_selecting_two_parcelles_builds_coherent_side_by_side_table():
     assert chart_df.loc["Économique", "Parcelle Nord"] == 68
     assert chart_df.loc["Eau", "Parcelle Sud"] == 80
     assert chart_df.loc["Topographie", "Parcelle Sud"] == 83
+
+
+def test_selecting_zero_parcelle_returns_empty_state_message():
+    message = get_selection_message([])
+
+    assert message == "Sélectionnez au moins une parcelle pour comparer."
