@@ -1,7 +1,7 @@
 # agriTools — Roadmap
 
-**Dernière mise à jour :** 2026-04-04
-**État global :** Phases 0–3 terminées · Phase 4 en cours de constitution
+**Dernière mise à jour :** 2026-04-22
+**État global :** Phases 0–3 terminées · Phase 4 en cours (socle Linux + consolidation)
 
 ---
 
@@ -13,7 +13,7 @@
 | Phase 1 | Datalake fondations | ✅ Terminée |
 | Phase 2 | Données personnelles + enrichissement geo | ✅ Terminée |
 | Phase 3 | Outil d'aide à l'implantation v1 | ✅ Terminée |
-| Phase 4 | Consolidation & profondeur | 🔵 En cours (comparaison multi-parcelles ajouté) |
+| Phase 4 | Socle Linux ferme + consolidation | 🔵 En cours |
 
 ---
 
@@ -51,7 +51,7 @@
 | Validation schémas | **Pydantic v2** | Contrats de données explicites sur les modèles métier |
 | Interface utilisateur | **Streamlit ≥ 1.35** | Prototypage rapide d'apps data, pas de JS requis |
 | Cartographie | **GeoPandas + Folium** | Analyse spatiale + rendu carte dans Streamlit |
-| Scheduler | **Windows Scheduled Tasks** (scripts PowerShell) | Solution native Windows, zéro dépendance Python supplémentaire |
+| Scheduler | **systemd timers** (Linux, Phase 4a) | Remplace Windows Scheduled Tasks — natif Debian, fiable, journald intégré |
 | Génération PDF | **reportlab ≥ 4.0** | Rapports A4 structurés pour l'outil d'implantation |
 | Tests | **pytest** | Couverture des parsers et du moteur de scoring |
 
@@ -167,18 +167,56 @@ agriTools/
 
 ---
 
-## 5. Phase 4 — Consolidation & profondeur (backlog)
+## 5. Phase 4 — Socle Linux ferme + consolidation
 
-### Reportés depuis phases précédentes
+### 4a. Image Linux ferme — socle de production
+
+**Objectif :** Préparer une image Debian stable préconfigurée contenant l'ensemble des services nécessaires à l'exploitation de la ferme, redéployable en moins d'une heure sur un laptop x86_64 d'occasion.
+
+**Principes :**
+
+- L'image est *cattle, not pet* : on reflashe, on ne répare pas. La définition est dans Git.
+- Le datalake (raw + processed) vit sur une clé USB montée au boot — il survit au redéploiement.
+- Le poste Windows reste en parallèle comme filet de sécurité pendant la validation.
+- Zéro dépendance cloud pour le fonctionnement nominal.
+
+**Décisions prises :**
+
+| Décision | Choix | Justification |
+|---|---|---|
+| Distribution | **Debian stable** | Durabilité, simplicité, écosystème mature, pas de courbe d'apprentissage |
+| Infrastructure as Code | **Script Bash idempotent** versionné dans le dépôt | Cohérent avec les compétences existantes (Bash/PowerShell), testable, lisible |
+| Matériel cible | Laptops x86_64 d'occasion | Budget minimal, matériel disponible facilement |
+| Stockage données | **Clé USB** montée automatiquement | Le datalake survit au reflash de l'image |
+| Accès distant | Non prévu | Pas de besoin identifié à ce stade |
+
+**Items :**
+
+| Item | Statut | Notes |
+|---|---|---|
+| Script Bash de provisioning | ⬜ | Installation paquets apt, Python 3.12+, uv, DuckDB, création utilisateur, montage clé USB |
+| Portage systemd timers | ⬜ | Remplacement des 2 scripts PowerShell (météo daily, RNM hebdo) par des timers systemd |
+| Streamlit en service systemd | ⬜ | Démarrage automatique au boot, accessible sur le réseau local |
+| Validation datalake sur Linux | ⬜ | 127 tests passent, chemins config adaptés, Parquet lisibles |
+| Intégration hledger | ⬜ | Installation hledger + module ingestion comptabilité (reporté depuis Phase 2) |
+| Build image ISO/img | ⬜ | Via `debian-live-build` ou Packer, consomme le script Bash |
+| Documentation de redéploiement | ⬜ | Procédure : flash image → brancher clé USB → valider. Objectif < 1h |
+| Module facturation | ⬜ À spécifier | Outil léger à déterminer (factur-x, générateur PDF maison…) |
+| Rôles supplémentaires | ⬜ À spécifier | Monitoring, DNS local… à évaluer selon besoins réels |
+
+### 4b. Consolidation & profondeur
+
+**Note :** Tous les items ci-dessous sont développés directement sur le socle Linux.
+
+#### Reportés depuis phases précédentes
 
 | Item | Origine | Notes |
 |---|---|---|
 | Pydantic contracts sur parsers | Phase 1 | Parsers robustes pour usage solo — priorité basse |
-| Module ingestion comptabilité | Phase 2 | Attente mise en place hledger + relevés bancaires |
-| Page dashboard comptabilité | Phase 2 | Dépend du module ingestion compta |
+| Page dashboard comptabilité | Phase 2 | Dépend du module ingestion compta (désormais en 4a) |
 | Module ingestion sondes terrain | Phase 2 | Attente réception matériel |
 
-### Nouvelles entrées Phase 4
+#### Nouvelles entrées
 
 | Item | Notes |
 |---|---|
@@ -193,20 +231,20 @@ agriTools/
 
 ---
 
-## 5. Phase 5 — Usage réel & industrialisation (planifié)
+## 6. Phase 5 — Usage réel & industrialisation (planifié)
 
 | Item | Notes |
 |---|---|
 | Feedback terrain | Collecter les retours sur les premières parcelles comparées pour affiner les critères et les poids |
 | Documentation utilisateur | Guide d'usage Streamlit + process d'enrichissement des parcelles |
 | Enrichissement sol | Intégrer données pédologiques INRAE GéoSol et texture/pH dans le scoring |
-| Automatisation locale | Valider les tâches planifiées Windows + rapports PDF automatiques |
+| Automatisation locale | Valider les systemd timers Linux + rapports PDF automatiques |
 | Gouvernance des données | Définir lifecycle raw/processed/perso et audit trails |
 | Pilotage multi-parcelles | Filtrage, tri et comparaison de lots plus larges | 
 
 ---
 
-## 6. Points d'attention & décisions prises
+## 7. Points d'attention & décisions prises
 
 ### Données personnelles & confidentialité
 
@@ -230,11 +268,20 @@ Windows Scheduled Tasks via PowerShell (`Register-ScheduledTask`) retenu au lieu
 
 ### Comptabilité
 
-hledger retenu comme outil de saisie (plain-text accounting). Module d'ingestion à développer une fois hledger configuré et premiers exports disponibles.
+hledger retenu comme outil de saisie (plain-text accounting). Module d'ingestion intégré au socle Linux (Phase 4a).
+
+### Poste de production Linux
+
+- **Distribution :** Debian stable — durabilité et simplicité, cohérent avec les principes directeurs.
+- **IaC :** Script Bash idempotent versionné dans le dépôt (pas Ansible/NixOS — complexité non justifiée pour un poste unique).
+- **Matériel :** Laptops x86_64 d'occasion — budget minimal, disponibilité facile.
+- **Stockage données :** Clé USB montée au boot — le datalake est découplé du système, survit au reflash.
+- **Migration progressive :** Le poste Windows reste opérationnel en parallèle pendant la validation du socle Linux.
+- NixOS écarté : reproductibilité déclarative séduisante mais courbe d'apprentissage incompatible avec un projet solo (empaquetage Python/uv/GDAL pénible, documentation fragmentée).
 
 ---
 
-## 7. Métriques de succès
+## 8. Métriques de succès
 
 | Métrique | Cible initiale | Réalisé (Phase 3) |
 |---|---|---|
@@ -244,10 +291,14 @@ hledger retenu comme outil de saisie (plain-text accounting). Module d'ingestion
 | Parcelles modélisables dans l'outil | ≥ 10 | Illimité (JSON + Parquet) ✅ |
 | Temps pour comparer 2 parcelles | < 5 min (saisie → score) | ~2 min (formulaire → score → PDF) ✅ |
 | Rapport PDF implantation | Phase 4 initialement | **Livré en Phase 3** ✅ |
+| Temps de redéploiement (flash → services up) | < 1 h | Phase 4 |
+| Services automatiques au boot | Collecte + Streamlit + backup | Phase 4 |
+| Définition image versionnée dans Git | Oui | Phase 4 |
+| Zéro intervention manuelle post-flash | Hors montage clé USB | Phase 4 |
 
 ---
 
-## 8. Archives — Phases 0–3 (livré)
+## 9. Archives — Phases 0–3 (livré)
 
 ### Phase 0 — Bootstrap ✅
 
